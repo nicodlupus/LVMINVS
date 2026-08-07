@@ -1,8 +1,11 @@
 # LVMINVS
 
-An application for noticing compulsions and overthinking, and understanding yourself
-better. Not a clinical tool and not limited to a diagnosis — everyone loops on
-something, at some scale.
+A research-state web-data application that uses AI and GenAI technologies to help
+people learn in depth their thinking processes and their intrusive patterns.
+
+It is for noticing compulsions and overthinking, and understanding yourself better —
+not a clinical tool and not limited to a diagnosis. Everyone loops on something, at
+some scale.
 
 **Institution:** University of Nicosia · **Course:** COMP-248
 **Supervisor:** Dr. Ioannis Katakis
