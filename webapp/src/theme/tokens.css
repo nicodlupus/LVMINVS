@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/* ---------- Theme tokens ---------------------------------------------
+   Accent is chosen by the person (see Appearance in the side menu).
+   Surfaces derive from the accent so the whole app takes on their colour. */
+:root { --accent: #7c6cf0; }
+[data-accent="violet"]  { --accent: #7c6cf0; }
+[data-accent="green"]   { --accent: #4f9d76; }
+[data-accent="blue"]    { --accent: #4d8ed6; }
+[data-accent="amber"]   { --accent: #c2873c; }
+[data-accent="rose"]    { --accent: #d1738c; }
+[data-accent="graphite"]{ --accent: #6f7580; }
+
+[data-mode="light"] {
+  --bg:        color-mix(in srgb, var(--accent) 5%, #f7f6f4);
+  --surface:   color-mix(in srgb, var(--accent) 2%, #ffffff);
+  --surface-2: color-mix(in srgb, var(--accent) 7%, #ffffff);
+  --border:    color-mix(in srgb, var(--accent) 14%, #e7e5e1);
+  --text:      color-mix(in srgb, var(--accent) 12%, #1c1b20);
+  --muted:     color-mix(in srgb, var(--accent) 10%, #77757e);
+  --soft:      color-mix(in srgb, var(--accent) 12%, #ffffff);
+  --on-accent: #ffffff;
+  --shadow:    0 1px 2px rgba(20,18,30,.04), 0 8px 24px -12px rgba(20,18,30,.18);
+}
+[data-mode="dark"] {
+  --bg:        color-mix(in srgb, var(--accent) 7%, #0e0e12);
+  --surface:   color-mix(in srgb, var(--accent) 9%, #17171d);
+  --surface-2: color-mix(in srgb, var(--accent) 14%, #1c1c23);
+  --border:    color-mix(in srgb, var(--accent) 18%, #2a2a33);
+  --text:      color-mix(in srgb, var(--accent) 6%, #ecebf0);
+  --muted:     color-mix(in srgb, var(--accent) 14%, #93919c);
+  --soft:      color-mix(in srgb, var(--accent) 20%, #17171d);
+  --on-accent: #ffffff;
+  --shadow:    0 1px 2px rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.7);
+}
+
+/* classic serif body, intertwined with a technical monospace for meta/figures */
+:root {
+  --serif: "Times New Roman", Times, Georgia, serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+html, body { height: 100%; }
+body {
+  font-family: var(--serif);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  transition: background .4s ease;
+}
+
+/* technical accents */
+.mono  { font-family: var(--mono); font-feature-settings: "tnum"; }
+.tnum  { font-variant-numeric: tabular-nums; }
+.wordmark { font-family: var(--serif); letter-spacing: .34em; text-transform: uppercase; }
+.eyebrow  { font-family: var(--mono); letter-spacing: .16em; text-transform: uppercase; }
+/* faint engraving grid — the "tech" layer under the classic type */
+.etch {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--accent) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+
+/* the app shell — fluid on phones, a comfortable centred column on larger screens */
+.shell {
+  min-height: 100dvh;
+  background:
+    radial-gradient(1000px 600px at 50% -10%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%),
+    var(--bg);
+  transition: background .4s ease;
+  display: flex;
+  justify-content: center;
+}
+.frame {
+  width: 100%;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+@media (min-width: 640px) {
+  .frame {
+    max-width: 640px;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+}
+
+.scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.scroll::-webkit-scrollbar { display: none; }
+
+input, textarea, button { font: inherit; color: inherit; }
+input:focus, textarea:focus { outline: none; }
+button { -webkit-tap-highlight-color: transparent; }
+
+/* ---------- motion ---------- */
+@keyframes fadeUp { from { opacity:0; transform: translateY(10px) } to { opacity:1; transform:none } }
+@keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+@keyframes slideUp { from { transform: translateY(100%) } to { transform:none } }
+@keyframes slideInLeft { from { transform: translateX(-100%) } to { transform:none } }
+@keyframes pulseRing {
+  0% { transform: scale(.9); opacity:.6 } 70% { transform: scale(1.5); opacity:0 } 100% { opacity:0 }
+}
+@keyframes bar { 0%,100% { transform: scaleY(.25) } 50% { transform: scaleY(1) } }
+@keyframes blink { 0%,80%,100% { opacity:.25 } 40% { opacity:1 } }
+.anim-up   { animation: fadeUp .32s cubic-bezier(.2,.7,.3,1) both; }
+.anim-in   { animation: fadeIn .25s ease both; }
+.anim-sheet{ animation: slideUp .3s cubic-bezier(.2,.8,.25,1) both; }
+.anim-drawer{ animation: slideInLeft .28s cubic-bezier(.2,.8,.25,1) both; }
+.stagger > * { animation: fadeUp .4s cubic-bezier(.2,.7,.3,1) both; }
+.stagger > *:nth-child(1) { animation-delay: .02s }
+.stagger > *:nth-child(2) { animation-delay: .07s }
+.stagger > *:nth-child(3) { animation-delay: .12s }
+.stagger > *:nth-child(4) { animation-delay: .17s }
+.stagger > *:nth-child(5) { animation-delay: .22s }
+.press:active { transform: scale(.975); }
+.press { transition: transform .12s ease, background .2s ease, border-color .2s ease; }
+
+.wave span { display:block; width:3px; border-radius:3px; background: var(--on-accent); animation: bar 1s ease-in-out infinite; }
+
+/* range slider, themed */
+input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+input[type=range]::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent) var(--pct,50%), var(--border) var(--pct,50%));
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 26px; height: 26px; border-radius: 99px; margin-top: -10px;
+  background: var(--surface); border: 3px solid var(--accent); box-shadow: var(--shadow); cursor: pointer;
+}

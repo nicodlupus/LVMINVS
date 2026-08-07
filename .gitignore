@@ -1,0 +1,23 @@
+# secrets — never commit
+.env
+.env.*
+!.env.example
+
+# user data (encrypted vaults, local accounts)
+*.db
+backend/cache/
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+
+# node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# os / editor
+.DS_Store
+.vscode/
+*.log

@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pydantic
+openai
+pypdf
+python-dotenv
+sentence-transformers

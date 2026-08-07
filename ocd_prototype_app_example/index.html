@@ -1,0 +1,2271 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="light" data-accent="violet">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>LVMINVS — prototype</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<!-- pinned to Babel 7: v8's react preset emits `import "react/jsx-runtime"`, which a plain script tag cannot load -->
+<script src="https://unpkg.com/@babel/standalone@7.29.7/babel.min.js"></script>
+<style>
+  /* ---------- Theme tokens ---------------------------------------------
+     Accent is chosen by the person (see Appearance in the side menu).
+     Surfaces derive from the accent so the whole app takes on their colour. */
+  :root { --accent: #7c6cf0; }
+  [data-accent="violet"]  { --accent: #7c6cf0; }
+  [data-accent="green"]   { --accent: #4f9d76; }
+  [data-accent="blue"]    { --accent: #4d8ed6; }
+  [data-accent="amber"]   { --accent: #c2873c; }
+  [data-accent="rose"]    { --accent: #d1738c; }
+  [data-accent="graphite"]{ --accent: #6f7580; }
+
+  [data-mode="light"] {
+    --bg:        color-mix(in srgb, var(--accent) 5%, #f7f6f4);
+    --surface:   color-mix(in srgb, var(--accent) 2%, #ffffff);
+    --surface-2: color-mix(in srgb, var(--accent) 7%, #ffffff);
+    --border:    color-mix(in srgb, var(--accent) 14%, #e7e5e1);
+    --text:      color-mix(in srgb, var(--accent) 12%, #1c1b20);
+    --muted:     color-mix(in srgb, var(--accent) 10%, #77757e);
+    --soft:      color-mix(in srgb, var(--accent) 12%, #ffffff);
+    --on-accent: #ffffff;
+    --shadow:    0 1px 2px rgba(20,18,30,.04), 0 8px 24px -12px rgba(20,18,30,.18);
+  }
+  [data-mode="dark"] {
+    --bg:        color-mix(in srgb, var(--accent) 7%, #0e0e12);
+    --surface:   color-mix(in srgb, var(--accent) 9%, #17171d);
+    --surface-2: color-mix(in srgb, var(--accent) 14%, #1c1c23);
+    --border:    color-mix(in srgb, var(--accent) 18%, #2a2a33);
+    --text:      color-mix(in srgb, var(--accent) 6%, #ecebf0);
+    --muted:     color-mix(in srgb, var(--accent) 14%, #93919c);
+    --soft:      color-mix(in srgb, var(--accent) 20%, #17171d);
+    --on-accent: #ffffff;
+    --shadow:    0 1px 2px rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.7);
+  }
+
+  /* classic serif body, intertwined with a technical monospace for meta/figures */
+  :root {
+    --serif: "Times New Roman", Times, Georgia, serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--serif);
+    background: #e9e7e4;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+  }
+  [data-mode="dark"] body { background: #08080b; }
+
+  /* technical accents */
+  .mono  { font-family: var(--mono); font-feature-settings: "tnum"; }
+  .tnum  { font-variant-numeric: tabular-nums; }
+  .wordmark { font-family: var(--serif); letter-spacing: .34em; text-transform: uppercase; }
+  .eyebrow  { font-family: var(--mono); letter-spacing: .16em; text-transform: uppercase; }
+  /* faint engraving grid — the "tech" layer under the classic type */
+  .etch {
+    background-image:
+      linear-gradient(color-mix(in srgb, var(--accent) 8%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent) 1px, transparent 1px);
+    background-size: 26px 26px;
+  }
+
+  /* the stage behind the phone, desktop only */
+  .stage {
+    min-height: 100dvh; display: grid; place-items: center; padding: 24px;
+    background:
+      radial-gradient(1000px 600px at 50% -10%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%),
+      var(--bg);
+    transition: background .4s ease;
+  }
+  .device {
+    width: 393px; height: 852px; max-height: calc(100dvh - 48px);
+    border-radius: 46px; overflow: hidden; position: relative;
+    background: var(--bg);
+    box-shadow: 0 0 0 10px #101014, 0 0 0 12px #2c2c33, 0 40px 80px -30px rgba(0,0,0,.55);
+    display: flex; flex-direction: column;
+  }
+  @media (max-width: 520px) {
+    .stage { padding: 0; }
+    .device { width: 100%; height: 100dvh; max-height: none; border-radius: 0; box-shadow: none; }
+    .notch { display: none; }
+  }
+  .notch {
+    position: absolute; top: 9px; left: 50%; transform: translateX(-50%);
+    width: 108px; height: 30px; background: #101014; border-radius: 999px; z-index: 60;
+  }
+
+  .scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .scroll::-webkit-scrollbar { display: none; }
+
+  input, textarea, button { font: inherit; color: inherit; }
+  input:focus, textarea:focus { outline: none; }
+  button { -webkit-tap-highlight-color: transparent; }
+
+  /* ---------- motion ---------- */
+  @keyframes fadeUp { from { opacity:0; transform: translateY(10px) } to { opacity:1; transform:none } }
+  @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+  @keyframes slideUp { from { transform: translateY(100%) } to { transform:none } }
+  @keyframes slideInLeft { from { transform: translateX(-100%) } to { transform:none } }
+  @keyframes pulseRing {
+    0% { transform: scale(.9); opacity:.6 } 70% { transform: scale(1.5); opacity:0 } 100% { opacity:0 }
+  }
+  @keyframes bar { 0%,100% { transform: scaleY(.25) } 50% { transform: scaleY(1) } }
+  @keyframes blink { 0%,80%,100% { opacity:.25 } 40% { opacity:1 } }
+  .anim-up   { animation: fadeUp .32s cubic-bezier(.2,.7,.3,1) both; }
+  .anim-in   { animation: fadeIn .25s ease both; }
+  .anim-sheet{ animation: slideUp .3s cubic-bezier(.2,.8,.25,1) both; }
+  .anim-drawer{ animation: slideInLeft .28s cubic-bezier(.2,.8,.25,1) both; }
+  .stagger > * { animation: fadeUp .4s cubic-bezier(.2,.7,.3,1) both; }
+  .stagger > *:nth-child(1) { animation-delay: .02s }
+  .stagger > *:nth-child(2) { animation-delay: .07s }
+  .stagger > *:nth-child(3) { animation-delay: .12s }
+  .stagger > *:nth-child(4) { animation-delay: .17s }
+  .stagger > *:nth-child(5) { animation-delay: .22s }
+  .press:active { transform: scale(.975); }
+  .press { transition: transform .12s ease, background .2s ease, border-color .2s ease; }
+
+  .wave span { display:block; width:3px; border-radius:3px; background: var(--on-accent); animation: bar 1s ease-in-out infinite; }
+
+  /* range slider, themed */
+  input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 6px; border-radius: 99px;
+    background: linear-gradient(90deg, var(--accent) var(--pct,50%), var(--border) var(--pct,50%));
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 26px; height: 26px; border-radius: 99px; margin-top: -10px;
+    background: var(--surface); border: 3px solid var(--accent); box-shadow: var(--shadow); cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } = React;
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MOCK DATA  — everything a backend would eventually serve
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const USER = {
+  name: "Nico",
+  fullName: "Nico Di Legardia",
+  handle: "@nico",
+  since: "March 2026",
+  avatar: "https://i.pravatar.cc/160?img=68",
+};
+const APP = "LVMINVS";
+
+/* ── Shared nodes ──────────────────────────────────────────────────────
+   Triggers, emotions and compulsions are their OWN nodes and are reused
+   across thoughts. That reuse is what lets the map surface a pattern —
+   e.g. many unrelated thoughts sharing one "mental reviewing" compulsion. */
+const TRIGGERS = {
+  tr_drive:  "Driving",
+  tr_night:  "Walking alone at night",
+  tr_leave:  "Leaving the house",
+  tr_body:   "A physical sensation",
+  tr_taboo:  "A frightening or taboo thought",
+  tr_wake:   "Waking up",
+  tr_code:   "An uncertain coding task",
+  tr_shift:  "Before a work shift",
+  tr_person: "Someone behaves badly",
+};
+const EMOTIONS_D = {
+  e_fear: "Fear", e_dread: "Dread", e_guilt: "Guilt", e_shame: "Shame",
+  e_anx: "Anxiety", e_anger: "Anger", e_unease: "Unease",
+};
+const COMPULSIONS = {
+  c_phrase:  "Repeating a protective phrase",
+  c_scan:    "Scanning and looking behind",
+  c_check:   "Checking again",
+  c_count:   "Counting 1·2·3",
+  c_reassure:"Seeking reassurance",
+  c_review:  "Mental reviewing",
+  c_bodytest:"Testing the body",
+  c_reask:   "Re-asking the same question",
+  c_reconstruct:"Reconstructing lost time",
+  c_ritual:  "A religious act to cancel a thought",
+};
+/* strings list the categorise flow offers as quick chips */
+const EMOTIONS = Object.values(EMOTIONS_D);
+
+/* Categories are the user's own organisational grouping — not diagnoses.
+   Editable, renameable, multiple per thought. `ai` marks a suggested one. */
+const CATEGORIES = [
+  { id: "cat_safety",   label: "Personal safety",        hue: 210 },
+  { id: "cat_certainty",label: "Certainty & checking",   hue: 275 },
+  { id: "cat_health",   label: "Health",                 hue: 160 },
+  { id: "cat_morality", label: "Meaning & morality",     hue: 35  },
+  { id: "cat_worth",    label: "Self-worth & doing",     hue: 300 },
+  { id: "cat_people",   label: "Relationships",          hue: 340 },
+];
+
+/* Thoughts carry the greatest weight. Each references shared node ids,
+   and keeps flat display fields the other screens read. */
+const mk = (o) => ({
+  ...o,
+  trigger:    TRIGGERS[o.trig[0]],
+  emotion:    EMOTIONS_D[o.emo[0]],
+  compulsion: COMPULSIONS[o.comp[0]],
+  category:   o.cats[0],
+  related: [],
+});
+const THOUGHTS = [
+  mk({ id:"t1",  thought:"Please don't let me die while I drive.", cats:["cat_safety"],
+       trig:["tr_drive"], emo:["e_fear"], comp:["c_phrase"], intensity:8, date:"2026-07-22T08:10:00",
+       note:"Repeated twice on entering the car, then again every few minutes." }),
+  mk({ id:"t2",  thought:"I hope nobody is following me.", cats:["cat_safety"],
+       trig:["tr_night"], emo:["e_fear","e_dread"], comp:["c_scan"], intensity:7, date:"2026-07-21T23:05:00",
+       note:"Scanned cars and kept looking behind on the walk home." }),
+  mk({ id:"t3",  thought:"Don't die. Don't lose it.", cats:["cat_safety"],
+       trig:["tr_taboo"], emo:["e_unease"], comp:["c_phrase","c_review"], intensity:5, date:"2026-07-20T19:40:00",
+       note:"Arrived while reading; broke the immersion, then I checked for the next one." }),
+  mk({ id:"t4",  thought:"What if I didn't lock the door?", cats:["cat_certainty"],
+       trig:["tr_leave"], emo:["e_dread"], comp:["c_check","c_count"], intensity:7, date:"2026-07-20T08:30:00",
+       note:"Went back, counted 1·2·3; restarted when it didn't feel complete." }),
+  mk({ id:"t5",  thought:"Smoking has already damaged my lungs.", cats:["cat_health"],
+       trig:["tr_body"], emo:["e_fear"], comp:["c_bodytest","c_reassure"], intensity:8, date:"2026-07-19T22:15:00",
+       note:"Touched chest, tested breathing, kept re-asking about symptoms." }),
+  mk({ id:"t6",  thought:"I must pray correctly or something bad will happen.", cats:["cat_morality","cat_certainty"],
+       trig:["tr_taboo"], emo:["e_guilt"], comp:["c_ritual"], intensity:7, date:"2026-07-18T21:00:00",
+       note:"A taboo thought created pressure to repeat the act until it felt right." }),
+  mk({ id:"t7",  thought:"Maybe I only hug my brother out of obligation.", cats:["cat_morality","cat_people"],
+       trig:["tr_taboo"], emo:["e_shame"], comp:["c_review"], intensity:6, date:"2026-07-17T18:20:00",
+       note:"Demanded a verdict on whether I really care." }),
+  mk({ id:"t8",  thought:"Without AI, could I build anything myself?", cats:["cat_worth"],
+       trig:["tr_code"], emo:["e_shame"], comp:["c_reask","c_reassure"], intensity:6, date:"2026-07-16T15:10:00",
+       note:"Asked for the whole solution, then felt dependent." }),
+  mk({ id:"t9",  thought:"Analyse this again until I know what it means.", cats:["cat_certainty","cat_worth"],
+       trig:["tr_taboo"], emo:["e_anx"], comp:["c_reask"], intensity:6, date:"2026-07-15T13:35:00",
+       note:"Reformulated the same question to get more analysis." }),
+  mk({ id:"t10", thought:"I already wasted the whole morning.", cats:["cat_worth"],
+       trig:["tr_wake"], emo:["e_guilt"], comp:["c_reconstruct","c_review"], intensity:5, date:"2026-07-14T10:05:00",
+       note:"Stayed in bed reconstructing what I could have done." }),
+  mk({ id:"t11", thought:"What problem will management create today?", cats:["cat_people"],
+       trig:["tr_shift"], emo:["e_anger","e_anx"], comp:["c_review"], intensity:5, date:"2026-07-13T12:00:00",
+       note:"Rehearsed conflicts before the shift began." }),
+  mk({ id:"t12", thought:"Is this person manipulative, or is it just me?", cats:["cat_people","cat_certainty"],
+       trig:["tr_person"], emo:["e_anger"], comp:["c_review","c_reassure"], intensity:6, date:"2026-07-12T17:45:00",
+       note:"Analysed motives to reach a universal verdict about them." }),
+];
+
+/* Connections between thoughts. Every one is a HYPOTHESIS with a basis,
+   a strength and a status the user controls — never a stated cause. */
+const CONNECTIONS = [
+  { id:"k1", a:"t7",  b:"t12", basis:"Both end in mental reviewing to reach a verdict about a person.",
+    strength:"tentative", source:"ai", status:"suggested" },
+  { id:"k2", a:"t3",  b:"t10", basis:"The situations look unrelated — a walk and a morning — but both run on mental reviewing.",
+    strength:"recurring", source:"ai", status:"suggested" },
+  { id:"k3", a:"t8",  b:"t9",  basis:"Both return to re-ask the same question until it feels certain.",
+    strength:"strong", source:"ai", status:"suggested" },
+  { id:"k4", a:"t1",  b:"t6",  basis:"Both repeat a fixed phrase or act to prevent a feared outcome.",
+    strength:"recurring", source:"ai", status:"accepted" },
+  { id:"k5", a:"t4",  b:"t5",  basis:"A checking-for-certainty pattern (door vs. body).",
+    strength:"tentative", source:"ai", status:"rejected" },
+];
+
+const MEMOS = [
+  { id: "m1", title: "In the car", duration: 47,  date: "2026-07-22T08:14:00", linked: "t1" },
+  { id: "m2", title: "Walking home", duration: 92, date: "2026-07-21T23:10:00", linked: "t2" },
+  { id: "m3", title: "Before the shift", duration: 24, date: "2026-07-13T11:40:00", linked: null },
+];
+
+/* Scripted companion dialogue — stands in for the language model */
+const HOME_REPLIES = [
+  ["I'm here. Take whatever time you need to put it into words.",
+   "You mentioned something close to this last Thursday. Would you like to look at them side by side?"],
+  ["Thank you for telling me. Nothing needs to be resolved right now.",
+   "Would it help to save this as a thought, or would you rather just leave it here?"],
+  ["That sounds like it carried some weight today.",
+   "There's a pattern I've noticed around evenings. Shall we come back to it in Reflection Time?"],
+];
+
+const REFLECTION_SCRIPT = [
+  { q: "Let's start gently. What was happening just before this thought arrived?",
+    chips: ["I was alone", "I was in a hurry", "I'd just spoken to someone"] },
+  { q: "And what emotion was underneath it?",
+    chips: ["Fear", "Guilt", "Shame", "Unease"] },
+  { q: "What did it feel like you had to do?",
+    chips: ["Check again", "Ask for reassurance", "I resisted it"] },
+  { q: "Does this remind you of another situation you've recorded?",
+    chips: ["Yes, the door one", "Not really", "I'm not sure"] },
+  { q: "That connection is worth keeping. I've noted it beside both thoughts — you can see the link in your MindMap whenever you want.",
+    chips: [], end: true },
+];
+
+const fmtDate = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + " · " +
+         d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+};
+const fmtDur = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+/* Category lookup. Screens that don't manage categories fall back to the
+   seed list; the map passes its live, editable list in explicitly. */
+const catOf = (id, list = CATEGORIES) =>
+  list.find(c => c.id === id) || { id, label: "Uncategorised", hue: 250 };
+const hueOf = (id, list) => catOf(id, list).hue;
+
+/* Node dictionaries by kind — used to render shared trigger/emotion/compulsion nodes */
+const NODE_DICT = { trigger: TRIGGERS, emotion: EMOTIONS_D, compulsion: COMPULSIONS };
+const nodeIds  = (t, kind) => t[{ trigger: "trig", emotion: "emo", compulsion: "comp" }[kind]] || [];
+const STRENGTH = {
+  tentative: { label: "Tentative", w: .55 },
+  recurring: { label: "Recurring", w: .78 },
+  strong:    { label: "Strong",    w: 1   },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LIVE COMPANION  — talks to api_guide_test.py on the same origin.
+   The scripted HOME_REPLIES / REFLECTION_SCRIPT above are kept only as the
+   offline fallback shape; every real turn now comes from the model.
+   ═══════════════════════════════════════════════════════════════════════ */
+const AI_SINK = { ingest: () => {} };   // App wires the MindMap into this
+
+async function askCompanion({ history, context = "", mode = "home" }) {
+  const r = await fetch("/api/companion", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ history, context, mode }),
+  });
+  const data = await r.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+/* The model sees what the user already holds, so it can compare mechanisms
+   across thoughts instead of treating each capture as isolated. */
+const buildContext = (thoughts = [], extra = "") => [
+  extra,
+  "EXISTING RECORDS:",
+  ...thoughts.slice(0, 12).map(t =>
+    `- "${t.thought}" | trigger: ${t.trigger} | emotion: ${t.emotion} | compulsion: ${t.compulsion}`),
+].filter(Boolean).join("\n");
+
+const rid = () => Math.random().toString(36).slice(2);
+const OFFLINE = "The companion is offline. Start the backend: ./.venv/bin/python api_guide_test.py";
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ICONS
+   ═══════════════════════════════════════════════════════════════════════ */
+const Ic = ({ d, size = 22, fill = "none", sw = 1.6, children, ...rest }) => (
+  <svg {...rest} width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor"
+       strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
+    {d ? <path d={d} /> : children}
+  </svg>
+);
+const IconMenu   = (p) => <Ic {...p}><path d="M4 7h16"/><path d="M4 12h11"/><path d="M4 17h16"/></Ic>;
+const IconBack   = (p) => <Ic {...p} d="M15 5l-7 7 7 7" />;
+const IconClose  = (p) => <Ic {...p}><path d="M6 6l12 12"/><path d="M18 6L6 18"/></Ic>;
+const IconMic    = (p) => <Ic {...p}><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></Ic>;
+const IconSend   = (p) => <Ic {...p}><path d="M4 12l16-8-6 8 6 8z"/></Ic>;
+const IconPlay   = (p) => <Ic {...p} fill="currentColor" sw="0"><path d="M8 5.5v13l11-6.5z"/></Ic>;
+const IconPause  = (p) => <Ic {...p} fill="currentColor" sw="0"><rect x="7" y="5" width="4" height="14" rx="1.2"/><rect x="13" y="5" width="4" height="14" rx="1.2"/></Ic>;
+const IconStop   = (p) => <Ic {...p} fill="currentColor" sw="0"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></Ic>;
+const IconHome   = (p) => <Ic {...p}><path d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></Ic>;
+const IconMap    = (p) => <Ic {...p}><circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="7" r="2"/><circle cx="6" cy="19" r="2"/><path d="M9.6 10.4L6.6 7.4M14.6 10.6l3-2.2M10 14.3l-2.6 3.1"/></Ic>;
+const IconSpark  = (p) => <Ic {...p}><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></Ic>;
+const IconUser   = (p) => <Ic {...p}><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></Ic>;
+const IconPlus   = (p) => <Ic {...p}><path d="M12 5v14"/><path d="M5 12h14"/></Ic>;
+const IconCheck  = (p) => <Ic {...p} d="M5 12.5l4.5 4.5L19 7" />;
+const IconChev   = (p) => <Ic {...p} d="M9 5l7 7-7 7" />;
+const IconPen    = (p) => <Ic {...p}><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17z"/></Ic>;
+const IconTrash  = (p) => <Ic {...p}><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7l1 13h10l1-13"/></Ic>;
+const IconFilter = (p) => <Ic {...p}><path d="M4 6h16"/><path d="M7 12h10"/><path d="M10 18h4"/></Ic>;
+const IconWave   = (p) => <Ic {...p}><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></Ic>;
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════════════════════════════════════ */
+const ACCENTS = [
+  { id: "violet",   label: "Violet",   swatch: "#7c6cf0" },
+  { id: "green",    label: "Forest",   swatch: "#4f9d76" },
+  { id: "blue",     label: "Tide",     swatch: "#4d8ed6" },
+  { id: "amber",    label: "Amber",    swatch: "#c2873c" },
+  { id: "rose",     label: "Rose",     swatch: "#d1738c" },
+  { id: "graphite", label: "Graphite", swatch: "#6f7580" },
+];
+const ThemeCtx = createContext(null);
+const useTheme = () => useContext(ThemeCtx);
+
+function ThemeProvider({ children }) {
+  const [mode, setMode] = useState(() => localStorage.getItem("loom.mode") || "light");
+  const [accent, setAccent] = useState(() => localStorage.getItem("loom.accent") || "violet");
+  useEffect(() => {
+    document.documentElement.dataset.mode = mode;
+    document.documentElement.dataset.accent = accent;
+    localStorage.setItem("loom.mode", mode);
+    localStorage.setItem("loom.accent", accent);
+  }, [mode, accent]);
+  return <ThemeCtx.Provider value={{ mode, setMode, accent, setAccent }}>{children}</ThemeCtx.Provider>;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PRIMITIVES
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const Card = ({ className = "", children, ...p }) => (
+  <div {...p} className={`rounded-3xl bg-[var(--surface)] border border-[var(--border)] ${className}`}
+       style={{ boxShadow: "var(--shadow)", ...(p.style || {}) }}>{children}</div>
+);
+
+const Button = ({ variant = "solid", className = "", children, ...p }) => {
+  const base = "press rounded-2xl px-5 py-3.5 text-[15px] font-medium flex items-center justify-center gap-2 disabled:opacity-40";
+  const v = {
+    solid:  "bg-[var(--accent)] text-[var(--on-accent)]",
+    soft:   "bg-[var(--soft)] text-[var(--accent)] border border-[var(--border)]",
+    ghost:  "text-[var(--muted)]",
+    outline:"border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]",
+  }[variant];
+  return <button {...p} className={`${base} ${v} ${className}`}>{children}</button>;
+};
+
+const Chip = ({ active, className = "", children, ...p }) => (
+  <button {...p} className={`press shrink-0 rounded-full px-3.5 py-2 text-[13px] border whitespace-nowrap
+    ${active ? "bg-[var(--accent)] text-[var(--on-accent)] border-transparent"
+             : "bg-[var(--surface)] text-[var(--muted)] border-[var(--border)]"} ${className}`}>{children}</button>
+);
+
+const Avatar = ({ size = 36, onClick }) => (
+  <button onClick={onClick} className="press rounded-full overflow-hidden border border-[var(--border)] shrink-0"
+          style={{ width: size, height: size }}>
+    <img src={USER.avatar} alt="" className="w-full h-full object-cover" />
+  </button>
+);
+
+/* Bottom sheet + full-screen modal */
+function Sheet({ open, onClose, children, title, full }) {
+  if (!open) return null;
+  return (
+    <div className="absolute inset-0 z-50 flex flex-col justify-end anim-in">
+      <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" onClick={onClose} />
+      <div className={`relative anim-sheet bg-[var(--surface)] rounded-t-[28px] border-t border-[var(--border)]
+                       flex flex-col ${full ? "h-[92%]" : "max-h-[85%]"}`}>
+        <div className="pt-3 pb-1 flex justify-center shrink-0">
+          <div className="w-10 h-1 rounded-full bg-[var(--border)]" />
+        </div>
+        {title && (
+          <div className="px-5 pb-3 pt-1 flex items-center justify-between shrink-0">
+            <h3 className="text-[17px] font-semibold text-[var(--text)]">{title}</h3>
+            <button onClick={onClose} className="press text-[var(--muted)] p-1"><IconClose size={20} /></button>
+          </div>
+        )}
+        <div className="scroll px-5 pb-8 flex-1">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Toast({ msg }) {
+  if (!msg) return null;
+  return (
+    <div className="absolute left-1/2 -translate-x-1/2 bottom-28 z-[70] anim-up">
+      <div className="rounded-full px-4 py-2.5 text-[13px] font-medium bg-[var(--text)] text-[var(--bg)] flex items-center gap-2"
+           style={{ boxShadow: "var(--shadow)" }}>
+        <IconCheck size={15} sw={2.2} />{msg}
+      </div>
+    </div>
+  );
+}
+
+/* Screen chrome: menu · title · avatar (matches the sketches) */
+function Header({ title, subtitle, onMenu, onAvatar, onBack }) {
+  return (
+    <div className="shrink-0 px-5 pt-3 pb-3 flex items-start gap-3">
+      <button onClick={onBack || onMenu} className="press p-1.5 -ml-1.5 mt-0.5 text-[var(--text)]">
+        {onBack ? <IconBack /> : <IconMenu />}
+      </button>
+      <div className="flex-1 min-w-0 text-center">
+        <div className="text-[17px] font-semibold leading-tight text-[var(--text)] truncate">{title}</div>
+        {subtitle && <div className="text-[12.5px] text-[var(--muted)] mt-0.5 truncate">{subtitle}</div>}
+      </div>
+      <Avatar onClick={onAvatar} />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CHAT ENGINE  — simulated companion
+   ═══════════════════════════════════════════════════════════════════════ */
+function useChat(initial = []) {
+  const [msgs, setMsgs] = useState(initial);
+  const [typing, setTyping] = useState(false);
+  const endRef = useRef(null);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, typing]);
+
+  const push = (m) => setMsgs(prev => [...prev, { id: Math.random().toString(36).slice(2), ...m }]);
+
+  /* Replies arrive one after another with a typing indicator between them */
+  const reply = useCallback((lines, chips) => {
+    const queue = Array.isArray(lines) ? lines : [lines];
+    let delay = 0;
+    queue.forEach((text, i) => {
+      delay += 550 + text.length * 12;
+      setTyping(true);
+      setTimeout(() => {
+        push({ from: "bot", text, chips: i === queue.length - 1 ? chips : null });
+        if (i === queue.length - 1) setTyping(false);
+      }, delay);
+    });
+  }, []);
+
+  /* ── live turn ──────────────────────────────────────────────────────
+     Appends the user's line, calls the backend, then lays the model's
+     messages out one after another exactly like the scripted engine did. */
+  const msgsRef = useRef(initial);
+  const commit = (arr) => { msgsRef.current = arr; setMsgs(arr); };
+  const reset  = useCallback((arr) => commit(Array.isArray(arr) ? arr : []), []);
+
+  const send = useCallback(async (text, { mode = "home", context = "", onData } = {}) => {
+    const next = [...msgsRef.current, { id: rid(), from: "me", text }];
+    commit(next);
+    setTyping(true);
+    try {
+      const data = await askCompanion({
+        mode, context,
+        history: next.map(m => ({ role: m.from === "me" ? "user" : "assistant", content: m.text })),
+      });
+      const lines = (data.reply || []).filter(Boolean);
+      const bots = (lines.length ? lines : ["…"]).map((t, i) => ({
+        id: rid(), from: "bot", text: t,
+        chips: i === lines.length - 1 ? (data.chips || []) : null,
+      }));
+      commit([...msgsRef.current, ...bots]);
+      AI_SINK.ingest(data);
+      onData?.(data);
+      return data;
+    } catch (e) {
+      commit([...msgsRef.current, { id: rid(), from: "bot", text: `${OFFLINE} (${e.message})` }]);
+    } finally {
+      setTyping(false);
+    }
+  }, []);
+
+  return { msgs, typing, push, reply, send, endRef, setMsgs: reset };
+}
+
+const Bubble = ({ m }) => (
+  <div className={`anim-up flex ${m.from === "me" ? "justify-end" : "justify-start"}`}>
+    <div className={`max-w-[80%] px-4 py-3 text-[14.5px] leading-relaxed
+      ${m.from === "me"
+        ? "bg-[var(--accent)] text-[var(--on-accent)] rounded-[20px] rounded-br-[6px]"
+        : "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)] rounded-[20px] rounded-bl-[6px]"}`}>
+      {m.text}
+    </div>
+  </div>
+);
+
+const Typing = () => (
+  <div className="flex justify-start anim-in">
+    <div className="bg-[var(--surface-2)] border border-[var(--border)] rounded-[20px] rounded-bl-[6px] px-4 py-3.5 flex gap-1.5">
+      {[0, 1, 2].map(i => (
+        <span key={i} className="w-1.5 h-1.5 rounded-full bg-[var(--muted)]"
+              style={{ animation: `blink 1.2s ${i * .18}s infinite` }} />
+      ))}
+    </div>
+  </div>
+);
+
+/* Text + microphone composer. The mic simulates dictation. */
+function Composer({ placeholder = "Type", onSend, autoFocus }) {
+  const [text, setText] = useState("");
+  const [listening, setListening] = useState(false);
+  const timer = useRef(null);
+
+  const dictate = () => {
+    if (listening) { clearTimeout(timer.current); setListening(false); return; }
+    setListening(true);
+    timer.current = setTimeout(() => {
+      setListening(false);
+      setText(t => (t ? t + " " : "") + "I keep going back to check the door");
+    }, 2200);
+  };
+
+  const submit = (e) => {
+    e?.preventDefault();
+    const v = text.trim();
+    if (!v) return;
+    setText(""); onSend(v);
+  };
+
+  return (
+    <form onSubmit={submit} className="shrink-0 px-4 pb-4 pt-2">
+      <div className="flex items-center gap-2 rounded-full bg-[var(--surface)] border border-[var(--border)] pl-5 pr-1.5 py-1.5"
+           style={{ boxShadow: "var(--shadow)" }}>
+        <input
+          value={listening ? "" : text}
+          autoFocus={autoFocus}
+          onChange={e => setText(e.target.value)}
+          placeholder={listening ? "Listening…" : placeholder}
+          className="flex-1 bg-transparent py-2.5 text-[15px] text-[var(--text)] placeholder:text-[var(--muted)] min-w-0"
+        />
+        {text.trim()
+          ? <button type="submit" className="press w-10 h-10 rounded-full grid place-items-center bg-[var(--accent)] text-[var(--on-accent)]">
+              <IconSend size={19} />
+            </button>
+          : <button type="button" onClick={dictate}
+              className={`press relative w-10 h-10 rounded-full grid place-items-center
+                ${listening ? "bg-[var(--accent)] text-[var(--on-accent)]" : "text-[var(--muted)]"}`}>
+              {listening && <span className="absolute inset-0 rounded-full bg-[var(--accent)]"
+                                  style={{ animation: "pulseRing 1.4s infinite" }} />}
+              <IconMic size={20} />
+            </button>}
+      </div>
+    </form>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SCREEN 1 · HOME
+   ═══════════════════════════════════════════════════════════════════════ */
+const FEATURES = [
+  { id: "capture",  title: "Capture Now",    desc: "Record or write it before it fades", primary: true },
+  { id: "map",      title: "MindMap",        desc: "See how things connect" },
+  { id: "reflect",  title: "Reflection Time",desc: "Go back over something, slowly" },
+  { id: "exercise", title: "Trigger Exercise", desc: "Sit with it without acting" },
+];
+
+function HomeScreen({ go, openMenu, chat }) {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Welcome back" : "Good evening";
+
+  return (
+    <>
+      <Header title={`${greeting}, ${USER.name}.`} onMenu={openMenu} onAvatar={() => go("profile")} />
+
+      <div className="scroll flex-1 px-5 pb-2">
+        <div className="stagger space-y-3 pt-2">
+          {/* the primary action gets more weight, as in the sketch */}
+          <button onClick={() => go("capture")}
+            className="press w-full text-left rounded-[28px] p-5 bg-[var(--accent)] text-[var(--on-accent)]"
+            style={{ boxShadow: "var(--shadow)" }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[21px] font-semibold tracking-tight">Capture Now</div>
+                <div className="text-[13.5px] opacity-80 mt-1">Record or write it before it fades</div>
+              </div>
+              <div className="w-12 h-12 rounded-full grid place-items-center bg-white/18"><IconMic size={24} /></div>
+            </div>
+          </button>
+
+          {FEATURES.slice(1).map(f => (
+            <button key={f.id} onClick={() => go(f.id)}
+              className="press w-full text-left rounded-[24px] p-4 bg-[var(--surface)] border border-[var(--border)] flex items-center gap-4"
+              style={{ boxShadow: "var(--shadow)" }}>
+              <div className="w-11 h-11 rounded-2xl grid place-items-center bg-[var(--soft)] text-[var(--accent)] shrink-0">
+                {f.id === "map" ? <IconMap size={21} /> : f.id === "reflect" ? <IconSpark size={21} /> : <IconWave size={21} />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[16px] font-medium text-[var(--text)]">{f.title}</div>
+                <div className="text-[12.5px] text-[var(--muted)] mt-0.5">{f.desc}</div>
+              </div>
+              <IconChev size={18} className="text-[var(--muted)]" />
+            </button>
+          ))}
+        </div>
+
+        {/* running conversation, if any */}
+        <div className="mt-6 space-y-2.5">
+          {chat.msgs.map(m => <Bubble key={m.id} m={m} />)}
+          {chat.typing && <Typing />}
+          <div ref={chat.endRef} />
+        </div>
+
+        {chat.msgs.length === 0 && (
+          <div className="mt-7 flex items-center gap-2.5 text-[var(--muted)]">
+            <div className="w-7 h-7 rounded-full bg-[var(--soft)] grid place-items-center text-[var(--accent)]">
+              <IconSpark size={15} />
+            </div>
+            <span className="text-[14.5px]">How is it going?</span>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SCREEN 2 · CAPTURE NOW
+   Recording is simulated — a real build stores audio, not a transcript.
+   ═══════════════════════════════════════════════════════════════════════ */
+function CaptureScreen({ go, openMenu, onSaveMemo, onSaveThought, toast }) {
+  const [tab, setTab] = useState("record");       // record | write
+  const [phase, setPhase] = useState("idle");     // idle | recording | review
+  const [secs, setSecs] = useState(0);
+  const [text, setText] = useState("");
+  const tick = useRef(null);
+
+  useEffect(() => () => clearInterval(tick.current), []);
+
+  const start = () => { setPhase("recording"); setSecs(0); tick.current = setInterval(() => setSecs(s => s + 1), 1000); };
+  const stop  = () => { clearInterval(tick.current); setPhase("review"); };
+  const discard = () => { clearInterval(tick.current); setSecs(0); setPhase("idle"); };
+
+  const saveMemo = () => {
+    onSaveMemo({ id: "m" + Date.now(), title: "Voice memo", duration: secs || 12, date: new Date().toISOString(), linked: null });
+    toast("Saved as audio · kept offline");
+    setPhase("idle"); setSecs(0); go("home");
+  };
+  const saveText = () => {
+    onSaveThought(text.trim());
+    toast("Thought saved");
+    setText(""); go("home");
+  };
+
+  return (
+    <>
+      <Header title="Capture Now" subtitle="Nothing is transcribed until you ask" onBack={() => go("home")} onAvatar={() => go("profile")} />
+
+      {/* mode switch */}
+      <div className="shrink-0 px-5 pt-1 pb-4">
+        <div className="flex p-1 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)]">
+          {[["record", "Record"], ["write", "Write"]].map(([id, label]) => (
+            <button key={id} onClick={() => { setTab(id); setPhase("idle"); }}
+              className={`press flex-1 py-2.5 rounded-xl text-[14px] font-medium
+                ${tab === id ? "bg-[var(--surface)] text-[var(--text)]" : "text-[var(--muted)]"}`}
+              style={tab === id ? { boxShadow: "var(--shadow)" } : {}}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="scroll flex-1 px-5 pb-6">
+        {tab === "record" ? (
+          <div className="flex flex-col items-center pt-6">
+            {phase !== "review" ? (
+              <>
+                <button onClick={phase === "idle" ? start : stop}
+                  className="press relative w-40 h-40 rounded-full grid place-items-center bg-[var(--accent)] text-[var(--on-accent)]"
+                  style={{ boxShadow: "0 18px 40px -18px var(--accent)" }}>
+                  {phase === "recording" && <>
+                    <span className="absolute inset-0 rounded-full bg-[var(--accent)]" style={{ animation: "pulseRing 2s infinite" }} />
+                    <span className="absolute inset-0 rounded-full bg-[var(--accent)]" style={{ animation: "pulseRing 2s .6s infinite" }} />
+                  </>}
+                  {phase === "recording"
+                    ? <div className="flex items-end gap-1.5 h-12 wave">
+                        {[...Array(7)].map((_, i) =>
+                          <span key={i} style={{ height: 44, animationDelay: `${i * .12}s`, animationDuration: `${.7 + (i % 3) * .2}s` }} />)}
+                      </div>
+                    : <IconMic size={54} sw={1.3} />}
+                </button>
+
+                <div className="mt-7 text-center">
+                  {phase === "recording" ? (
+                    <>
+                      <div className="text-[34px] font-light tabular-nums tracking-tight text-[var(--text)]">{fmtDur(secs)}</div>
+                      <div className="text-[13px] text-[var(--muted)] mt-1 flex items-center justify-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> Recording · tap to stop
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-[17px] font-medium text-[var(--text)]">Tap to start recording</div>
+                      <p className="text-[13.5px] text-[var(--muted)] mt-2 max-w-[260px] leading-relaxed">
+                        Speak freely. It's saved as audio, not turned into text, so nothing interrupts you.
+                      </p>
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* memo review card */
+              <div className="w-full anim-up">
+                <div className="text-center mb-5">
+                  <div className="text-[17px] font-medium text-[var(--text)]">Ready to keep?</div>
+                  <div className="text-[13px] text-[var(--muted)] mt-1">Stored on your device</div>
+                </div>
+                <MemoCard memo={{ title: "New voice memo", duration: secs || 12, date: new Date().toISOString() }} />
+                <div className="grid grid-cols-2 gap-3 mt-5">
+                  <Button variant="outline" onClick={discard}><IconTrash size={17} />Delete</Button>
+                  <Button onClick={saveMemo}><IconCheck size={17} sw={2.2} />Save</Button>
+                </div>
+                <button onClick={() => { saveMemo(); }} className="press w-full mt-3 text-[13.5px] text-[var(--muted)] py-2">
+                  Save and reflect on it later
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="anim-up">
+            <textarea
+              value={text} onChange={e => setText(e.target.value)} autoFocus
+              placeholder="What just happened, and what went through your mind?"
+              className="w-full h-64 rounded-3xl p-5 bg-[var(--surface)] border border-[var(--border)]
+                         text-[15.5px] leading-relaxed text-[var(--text)] placeholder:text-[var(--muted)] resize-none"
+              style={{ boxShadow: "var(--shadow)" }} />
+            <div className="flex items-center justify-between mt-3 px-1">
+              <span className="text-[12px] text-[var(--muted)]">{text.trim().split(/\s+/).filter(Boolean).length} words</span>
+              <span className="text-[12px] text-[var(--muted)]">Categorise it later</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-5">
+              <Button variant="outline" onClick={() => go("home")}>Cancel</Button>
+              <Button onClick={saveText} disabled={!text.trim()}><IconCheck size={17} sw={2.2} />Save</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* A saved voice memo, with a fake transport */
+function MemoCard({ memo, onSelect, selected }) {
+  const [playing, setPlaying] = useState(false);
+  const [pos, setPos] = useState(0);
+  useEffect(() => {
+    if (!playing) return;
+    const t = setInterval(() => setPos(p => {
+      if (p >= memo.duration) { setPlaying(false); return 0; }
+      return p + 1;
+    }), 320);
+    return () => clearInterval(t);
+  }, [playing, memo.duration]);
+
+  return (
+    <Card onClick={onSelect}
+      className={`p-4 ${onSelect ? "press cursor-pointer" : ""} ${selected ? "!border-[var(--accent)]" : ""}`}>
+      <div className="flex items-center gap-3.5">
+        <button onClick={e => { e.stopPropagation(); setPlaying(p => !p); }}
+          className="press w-12 h-12 rounded-full grid place-items-center bg-[var(--accent)] text-[var(--on-accent)] shrink-0">
+          {playing ? <IconPause size={20} /> : <IconPlay size={20} />}
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="text-[15px] font-medium text-[var(--text)] truncate">{memo.title}</div>
+          <div className="flex items-end gap-[3px] h-6 mt-2">
+            {[...Array(28)].map((_, i) => {
+              const h = 6 + ((i * 37) % 17);
+              const on = (i / 28) * memo.duration <= pos && playing;
+              return <div key={i} className="w-[3px] rounded-full transition-colors"
+                style={{ height: h, background: on ? "var(--accent)" : "var(--border)" }} />;
+            })}
+          </div>
+          <div className="flex items-center gap-2 mt-2 text-[11.5px] text-[var(--muted)]">
+            <span className="tabular-nums">{fmtDur(playing ? pos : memo.duration)}</span>
+            <span>·</span><span>{fmtDate(memo.date)}</span>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SCREEN 3 · MINDMAP
+   Central "MindMap" node → categories → shared trigger / emotion /
+   compulsion nodes. Connections between thoughts are hypotheses the user
+   accepts or rejects. The map only surfaces patterns; it never concludes.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const ring = (i, n, cx, cy, r, squash = .82) => {
+  const a = -Math.PI / 2 + i * 2 * Math.PI / Math.max(n, 1);
+  return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) * squash };
+};
+const KIND_HUE = { compulsion: null, trigger: 205, emotion: 25 };
+const kindColor = (kind) => kind === "compulsion"
+  ? "var(--accent)" : `hsl(${KIND_HUE[kind]} 55% 58%)`;
+
+/* Reusable radial graph: a weighted centre with a ring of nodes.
+   The SVG and the node buttons live in ONE fixed-size box that is centred,
+   so the connecting lines and the bubbles share the same origin and stay
+   aligned regardless of container width. */
+function Graph({ centerLabel, centerSub, onCenter, nodes, hint }) {
+  /* keep the largest node fully inside the box so nothing is clipped */
+  const maxNode = nodes.reduce((m, n) => Math.max(m, n.size || 80), 84);
+  const pad = maxNode / 2 + 8;
+  const W = 320, H = 320;
+  const cx = W / 2, cy = H / 2;
+  const R = Math.min(W, H) / 2 - pad;      // radius that fits the ring
+  const pts = nodes.map((nd, i) => ({ ...nd, ...ring(i, nodes.length, cx, cy, R) }));
+  return (
+    <div className="relative w-full h-full grid place-items-center anim-in">
+      <div className="relative shrink-0" style={{ width: W, height: H }}>
+        <svg width={W} height={H} className="absolute inset-0 overflow-visible">
+          {pts.map(p => (
+            <line key={p.key} x1={cx} y1={cy} x2={p.x} y2={p.y}
+                  stroke="var(--border)" strokeWidth="1.4" strokeDasharray={p.dashed ? "2 5" : "0"} />
+          ))}
+          <circle cx={cx} cy={cy} r="54" fill="var(--soft)" opacity=".55" />
+        </svg>
+        <button onClick={onCenter}
+          className="press absolute rounded-full grid place-items-center text-center z-10"
+          style={{ left: cx - 50, top: cy - 50, width: 100, height: 100,
+                   background: "var(--accent)", color: "var(--on-accent)",
+                   boxShadow: "0 14px 34px -12px var(--accent)" }}>
+          <div>
+            <div className="wordmark text-[12px] leading-none">{centerLabel}</div>
+            {centerSub && <div className="eyebrow text-[8px] opacity-80 mt-1.5">{centerSub}</div>}
+          </div>
+        </button>
+        {pts.map(p => {
+          const s = p.size || 80;
+          return (
+            <button key={p.key} onClick={p.onClick}
+              className="press absolute rounded-full grid place-items-center text-center p-2 border anim-up"
+              style={{ left: p.x - s / 2, top: p.y - s / 2, width: s, height: s,
+                       background: "var(--surface)", borderColor: p.color || "var(--border)",
+                       boxShadow: "var(--shadow)" }}>
+              <span className="leading-tight text-[var(--text)] line-clamp-3" style={{ fontSize: p.fs || 11 }}>{p.label}</span>
+              {p.badge != null && <span className="mono text-[8.5px] text-[var(--muted)] mt-0.5">{p.badge}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {hint && <div className="absolute bottom-2 inset-x-0 text-center eyebrow text-[9px] text-[var(--muted)] pointer-events-none">{hint}</div>}
+    </div>
+  );
+}
+
+const Tag = ({ children, dot }) => (
+  <span className="inline-flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted)]">
+    {dot != null && <span className="w-2 h-2 rounded-full" style={{ background: dot }} />}{children}
+  </span>
+);
+
+function MapScreen({ go, openMenu, thoughts, onUpdate, toast, cats, setCats, connections, setConnections }) {
+  const [mode, setMode] = useState("overview");      // overview | category
+  const [lens, setLens] = useState("categories");    // categories | patterns | list
+  const [selCat, setSelCat] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [entity, setEntity] = useState(null);        // {kind, id}
+  const [wizard, setWizard] = useState(null);
+  const [manage, setManage] = useState(false);
+  const [opens, setOpens] = useState(0);             // rumination counter
+  const [muted, setMuted] = useState(false);
+
+  const countCat = (id) => thoughts.filter(t => t.cats.includes(id)).length;
+  const openDetail = (t) => { setDetail(t); setOpens(o => o + 1); };
+  const openEntity = (kind, id) => { setEntity({ kind, id }); setOpens(o => o + 1); };
+  const ruminating = opens >= 7 && !muted;
+
+  /* shared nodes appearing in ≥2 thoughts — the visible patterns */
+  const patternNodes = useMemo(() => {
+    const out = [];
+    ["compulsion", "trigger", "emotion"].forEach(kind => {
+      const dict = NODE_DICT[kind];
+      Object.keys(dict).forEach(id => {
+        const n = thoughts.filter(t => nodeIds(t, kind).includes(id)).length;
+        if (n >= 2) out.push({ kind, id, label: dict[id], n });
+      });
+    });
+    return out.sort((a, b) => b.n - a.n).slice(0, 7);
+  }, [thoughts]);
+
+  return (
+    <>
+      <Header title="MindMap" subtitle={`${thoughts.length} thoughts · ${cats.length} categories`}
+              onMenu={openMenu} onAvatar={() => go("profile")} />
+
+      {/* lens switch */}
+      <div className="shrink-0 px-5 pb-3 flex items-center gap-2">
+        <div className="flex p-1 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] flex-1">
+          {[["categories", "Categories"], ["patterns", "Patterns"], ["list", "List"]].map(([id, l]) => (
+            <button key={id} onClick={() => { setLens(id); setMode("overview"); }}
+              className={`press flex-1 py-2 rounded-xl text-[13px]
+                ${lens === id && mode === "overview" ? "bg-[var(--surface)] text-[var(--text)]" : "text-[var(--muted)]"}`}
+              style={lens === id && mode === "overview" ? { boxShadow: "var(--shadow)" } : {}}>{l}</button>
+          ))}
+        </div>
+        <button onClick={() => setManage(true)}
+          className="press w-10 h-10 rounded-xl grid place-items-center bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted)]">
+          <IconFilter size={18} />
+        </button>
+      </div>
+
+      {ruminating && (
+        <div className="shrink-0 mx-5 mb-2 p-3.5 rounded-2xl bg-[var(--soft)] border border-[var(--border)] anim-up">
+          <p className="text-[13.5px] text-[var(--text)] leading-snug">
+            You've opened a lot of connections just now. The map is for noticing, not for solving —
+            more looking rarely brings more certainty.
+          </p>
+          <div className="flex gap-2 mt-2.5">
+            <Button className="!py-2 !px-4 text-[13px]" onClick={() => go("home")}>Step away</Button>
+            <Button variant="ghost" className="!py-2 !px-4 text-[13px]" onClick={() => { setMuted(true); setOpens(0); }}>Keep looking</Button>
+          </div>
+        </div>
+      )}
+
+      {/* body — the graph area reserves space top and bottom so nothing
+          overlaps the info bar above it or the add button below it */}
+      {mode === "overview" && lens === "categories" && (
+        <div className="flex-1 relative overflow-hidden etch pb-16">
+          <Graph centerLabel="MindMap" centerSub="your patterns"
+            onCenter={() => setManage(true)}
+            hint="Tap a category to open it"
+            nodes={cats.map(c => ({
+              key: c.id, label: c.label, badge: countCat(c.id),
+              color: `hsl(${c.hue} 50% 60% / .6)`,
+              size: 64 + Math.min(countCat(c.id), 4) * 7, fs: 10.5,
+              onClick: () => { setSelCat(c.id); setMode("category"); },
+            }))} />
+        </div>
+      )}
+
+      {mode === "overview" && lens === "patterns" && (
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="shrink-0 px-5 pb-1">
+            <Card className="p-3">
+              <p className="text-[12.5px] text-[var(--muted)] leading-snug">
+                These threads recur across several thoughts. A shared thread is a pattern to notice — not a conclusion about you.
+              </p>
+            </Card>
+          </div>
+          <div className="flex-1 relative overflow-hidden etch pb-16">
+            <Graph centerLabel="MindMap" centerSub="shared threads"
+              onCenter={() => {}}
+              hint="Blue trigger · orange emotion · accent compulsion"
+              nodes={patternNodes.map(p => ({
+                key: p.kind + p.id, label: p.label, badge: `×${p.n}`,
+                color: kindColor(p.kind), size: 60 + p.n * 7, fs: 10,
+                onClick: () => openEntity(p.kind, p.id),
+              }))} />
+          </div>
+        </div>
+      )}
+
+      {mode === "overview" && lens === "list" && (
+        <div className="scroll flex-1 px-5 pb-24 space-y-3 stagger">
+          {thoughts.map(t => (
+            <Card key={t.id} className="p-4 press cursor-pointer" onClick={() => openDetail(t)}>
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                {t.cats.map(cid => (
+                  <span key={cid} className="mono text-[9.5px] text-[var(--muted)] flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: `hsl(${hueOf(cid, cats)} 55% 55%)` }} />
+                    {catOf(cid, cats).label}
+                  </span>
+                ))}
+                <span className="mono text-[9.5px] text-[var(--muted)] ml-auto">{fmtDate(t.date)}</span>
+              </div>
+              <div className="text-[16px] text-[var(--text)] leading-snug">“{t.thought}”</div>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                <Tag>{t.emotion}</Tag><Tag>{t.compulsion}</Tag>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {mode === "category" && selCat && (
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="shrink-0 px-5 pb-1">
+            <button onClick={() => setMode("overview")}
+              className="press inline-flex items-center gap-1.5 text-[13px] text-[var(--muted)] px-3 py-1.5 rounded-full bg-[var(--surface)] border border-[var(--border)]">
+              <IconBack size={15} />All categories
+            </button>
+          </div>
+          <div className="flex-1 relative overflow-hidden etch pb-16">
+            <Graph centerLabel={catOf(selCat, cats).label.split(" ")[0]}
+              centerSub={`${countCat(selCat)} thoughts`} onCenter={() => {}}
+              hint="Tap a thought to open it"
+              nodes={thoughts.filter(t => t.cats.includes(selCat)).map(t => ({
+                key: t.id, label: `“${t.thought}”`, size: 86, fs: 9.5,
+                color: `hsl(${hueOf(selCat, cats)} 50% 60% / .6)`,
+                onClick: () => openDetail(t),
+              }))} />
+          </div>
+        </div>
+      )}
+
+      {/* add thought — sits in the bottom-right corner, clear of the ring */}
+      <button onClick={() => setWizard({ isNew: true, thought: "", cats: [], trig: [], emo: [], comp: [] })}
+        className="press absolute right-4 bottom-[84px] z-30 rounded-full grid place-items-center bg-[var(--accent)] text-[var(--on-accent)]"
+        style={{ width: 52, height: 52, boxShadow: "0 12px 28px -10px var(--accent)" }}>
+        <IconPlus size={24} />
+      </button>
+
+      <ThoughtDetail thought={detail} thoughts={thoughts} cats={cats} connections={connections}
+        onClose={() => setDetail(null)} onOpenThought={openDetail} onOpenEntity={openEntity}
+        onEdit={t => { setDetail(null); setWizard(t); }}
+        onReflect={t => { setDetail(null); go("reflect", { thought: t }); }}
+        onExercise={t => { setDetail(null); go("exercise", { scenario: t }); }}
+        onAddCat={(t, cid) => onUpdate({ ...t, cats: [...new Set([...t.cats, cid])] })}
+        onRemoveCat={(t, cid) => onUpdate({ ...t, cats: t.cats.filter(x => x !== cid) })}
+        onConn={(id, status) => { setConnections(prev => prev.map(k => k.id === id ? { ...k, status } : k));
+                                  toast(status === "accepted" ? "Connection accepted" : "Suggestion dismissed"); }}
+        onLink={(a, b) => { setConnections(prev => [...prev, { id: "k" + Date.now(), a, b,
+          basis: "You linked these thoughts.", strength: "strong", source: "user", status: "accepted" }]);
+          toast("Thoughts linked"); }} />
+
+      <EntitySheet node={entity} thoughts={thoughts} cats={cats}
+        onClose={() => setEntity(null)} onOpenThought={t => { setEntity(null); openDetail(t); }} />
+
+      <CategoriseWizard base={wizard} cats={cats} onNewCat={(c) => setCats(prev => [...prev, c])}
+        onClose={() => setWizard(null)}
+        onDone={(t) => { onUpdate(t); setWizard(null); toast(t._new ? "Thought added to your map" : "Categorisation updated"); }} />
+
+      <CategoryManager open={manage} onClose={() => setManage(false)} cats={cats} setCats={setCats}
+        thoughts={thoughts} onUpdate={onUpdate} toast={toast} />
+    </>
+  );
+}
+
+/* Shared-node sheet: which thoughts run through this trigger/emotion/compulsion */
+function EntitySheet({ node, thoughts, cats, onClose, onOpenThought }) {
+  if (!node) return null;
+  const label = NODE_DICT[node.kind][node.id];
+  const list = thoughts.filter(t => nodeIds(t, node.kind).includes(node.id));
+  const kindLabel = { trigger: "Trigger", emotion: "Emotion", compulsion: "Compulsion" }[node.kind];
+  return (
+    <Sheet open onClose={onClose} title={label}>
+      <div className="eyebrow text-[10px] text-[var(--muted)] -mt-2 mb-4">
+        {kindLabel} · appears in {list.length} {list.length === 1 ? "record" : "records"}
+      </div>
+      <div className="space-y-2.5">
+        {list.map(t => (
+          <button key={t.id} onClick={() => onOpenThought(t)}
+            className="press w-full text-left p-3.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)]">
+            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+              {t.cats.map(cid => (
+                <span key={cid} className="w-2 h-2 rounded-full" style={{ background: `hsl(${hueOf(cid, cats)} 55% 55%)` }} />
+              ))}
+              <span className="mono text-[9.5px] text-[var(--muted)] ml-auto">{fmtDate(t.date)}</span>
+            </div>
+            <div className="text-[14.5px] text-[var(--text)] leading-snug">“{t.thought}”</div>
+          </button>
+        ))}
+      </div>
+      <p className="text-[12.5px] text-[var(--muted)] leading-relaxed mt-5">
+        A shared thread like this is a pattern worth noticing. It is not a diagnosis, and it doesn't mean these
+        situations are the same.
+      </p>
+    </Sheet>
+  );
+}
+
+const StrengthMeter = ({ strength }) => {
+  const s = STRENGTH[strength] || STRENGTH.tentative;
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className="w-14 h-1.5 rounded-full bg-[var(--border)] overflow-hidden">
+        <span className="block h-full rounded-full bg-[var(--accent)]" style={{ width: `${s.w * 100}%` }} />
+      </span>
+      <span className="mono text-[9.5px] text-[var(--muted)]">{s.label}</span>
+    </span>
+  );
+};
+
+function ThoughtDetail({ thought, thoughts, cats, connections, onClose, onOpenThought, onOpenEntity,
+                        onEdit, onReflect, onExercise, onAddCat, onRemoveCat, onConn, onLink }) {
+  const [addingCat, setAddingCat] = useState(false);
+  const [linking, setLinking] = useState(false);
+  useEffect(() => { setAddingCat(false); setLinking(false); }, [thought]);
+  if (!thought) return null;
+
+  const t = thoughts.find(x => x.id === thought.id) || thought;
+  const byId = (id) => thoughts.find(x => x.id === id);
+  const conns = connections.filter(k => (k.a === t.id || k.b === t.id) && k.status !== "rejected");
+  const other = (k) => byId(k.a === t.id ? k.b : k.a);
+  const suggested = conns.filter(k => k.status === "suggested");
+  const accepted = conns.filter(k => k.status === "accepted");
+  const shareCat = (o) => o && o.cats.some(c => t.cats.includes(c));
+  const availCats = cats.filter(c => !t.cats.includes(c.id));
+  const linkable = thoughts.filter(x => x.id !== t.id &&
+    !conns.some(k => other(k) && other(k).id === x.id));
+
+  const NodeRow = ({ kind, label }) => (
+    <div className="py-3 border-t border-[var(--border)] first:border-0">
+      <div className="eyebrow text-[9.5px] text-[var(--muted)] mb-2">{label}</div>
+      <div className="flex flex-wrap gap-2">
+        {nodeIds(t, kind).map(id => (
+          <button key={id} onClick={() => onOpenEntity(kind, id)}
+            className="press text-[13px] px-3 py-1.5 rounded-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text)]"
+            style={{ borderColor: kindColor(kind) === "var(--accent)" ? "var(--accent)" : kindColor(kind) }}>
+            {NODE_DICT[kind][id]}
+          </button>
+        ))}
+        {nodeIds(t, kind).length === 0 && <span className="text-[13px] text-[var(--muted)]">Not recorded</span>}
+      </div>
+    </div>
+  );
+
+  return (
+    <Sheet open onClose={onClose} title="Thought" full>
+      <div className="eyebrow text-[10px] text-[var(--muted)] -mt-2 mb-3">{fmtDate(t.date)}</div>
+
+      {/* weighted thought */}
+      <div className="rounded-3xl bg-[var(--soft)] border border-[var(--border)] p-5">
+        <div className="text-[22px] leading-snug text-[var(--text)]">“{t.thought}”</div>
+        {t.note && <div className="text-[13px] text-[var(--muted)] mt-3 leading-relaxed">{t.note}</div>}
+      </div>
+
+      {/* categories — user's own grouping, multiple allowed */}
+      <div className="mt-5">
+        <div className="eyebrow text-[9.5px] text-[var(--muted)] mb-2">Categories</div>
+        <div className="flex flex-wrap gap-2 items-center">
+          {t.cats.map(cid => (
+            <span key={cid} className="inline-flex items-center gap-1.5 text-[13px] pl-3 pr-2 py-1.5 rounded-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text)]">
+              <span className="w-2 h-2 rounded-full" style={{ background: `hsl(${hueOf(cid, cats)} 55% 55%)` }} />
+              {catOf(cid, cats).label}
+              <button onClick={() => onRemoveCat(t, cid)} className="press text-[var(--muted)] ml-0.5"><IconClose size={13} /></button>
+            </span>
+          ))}
+          <button onClick={() => setAddingCat(v => !v)}
+            className="press text-[13px] px-3 py-1.5 rounded-full border border-dashed border-[var(--border)] text-[var(--muted)] flex items-center gap-1">
+            <IconPlus size={13} />Add
+          </button>
+        </div>
+        {addingCat && (
+          <div className="flex flex-wrap gap-2 mt-2.5 anim-up">
+            {availCats.length ? availCats.map(c => (
+              <Chip key={c.id} onClick={() => { onAddCat(t, c.id); setAddingCat(false); }}>{c.label}</Chip>
+            )) : <span className="text-[12.5px] text-[var(--muted)]">On every category already.</span>}
+          </div>
+        )}
+      </div>
+
+      {/* shared nodes */}
+      <div className="mt-5 rounded-3xl border border-[var(--border)] px-4">
+        <NodeRow kind="trigger" label="Trigger" />
+        <NodeRow kind="emotion" label="Emotion" />
+        <NodeRow kind="compulsion" label="Compulsion / response" />
+      </div>
+      <p className="mono text-[9.5px] text-[var(--muted)] mt-2 px-1">Tap a node to see every thought that shares it.</p>
+
+      {/* accepted connections */}
+      {accepted.length > 0 && (
+        <div className="mt-6">
+          <div className="eyebrow text-[9.5px] text-[var(--muted)] mb-2.5">Connected thoughts</div>
+          <div className="space-y-2">
+            {accepted.map(k => { const o = other(k); if (!o) return null; return (
+              <button key={k.id} onClick={() => onOpenThought(o)}
+                className="press w-full text-left p-3.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)]">
+                <div className="text-[13.5px] text-[var(--text)]">“{o.thought}”</div>
+                <div className="mono text-[9.5px] text-[var(--muted)] mt-1.5">
+                  {k.source === "user" ? "You linked these" : "Accepted suggestion"}
+                </div>
+              </button>
+            ); })}
+          </div>
+        </div>
+      )}
+
+      {/* suggested connections — hypotheses to accept or reject */}
+      {suggested.length > 0 && (
+        <div className="mt-6">
+          <div className="eyebrow text-[9.5px] text-[var(--muted)] mb-2.5">Suggested by {APP}</div>
+          <div className="space-y-2.5">
+            {suggested.map(k => { const o = other(k); if (!o) return null; const unrelated = !shareCat(o); return (
+              <div key={k.id} className="p-4 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)]">
+                {unrelated && <div className="mono text-[9px] text-[var(--accent)] mb-1.5">APPARENTLY UNRELATED</div>}
+                <button onClick={() => onOpenThought(o)} className="press text-left text-[14px] text-[var(--text)] leading-snug">“{o.thought}”</button>
+                <p className="text-[12.5px] text-[var(--muted)] mt-2 leading-relaxed">{k.basis}</p>
+                <div className="flex items-center justify-between mt-3">
+                  <StrengthMeter strength={k.strength} />
+                  <div className="flex gap-2">
+                    <button onClick={() => onConn(k.id, "rejected")}
+                      className="press text-[12.5px] px-3 py-1.5 rounded-full border border-[var(--border)] text-[var(--muted)]">Not this</button>
+                    <button onClick={() => onConn(k.id, "accepted")}
+                      className="press text-[12.5px] px-3.5 py-1.5 rounded-full bg-[var(--accent)] text-[var(--on-accent)]">Accept</button>
+                  </div>
+                </div>
+              </div>
+            ); })}
+          </div>
+          <p className="text-[12px] text-[var(--muted)] mt-2.5 leading-relaxed">
+            Suggestions are hypotheses from your own records. Nothing is treated as true until you accept it.
+          </p>
+        </div>
+      )}
+
+      {/* manual link */}
+      <div className="mt-4">
+        <button onClick={() => setLinking(v => !v)}
+          className="press text-[13px] text-[var(--accent)] flex items-center gap-1.5">
+          <IconPlus size={14} />Link to another thought
+        </button>
+        {linking && (
+          <div className="mt-2 space-y-2 anim-up">
+            {linkable.slice(0, 6).map(o => (
+              <button key={o.id} onClick={() => { onLink(t.id, o.id); setLinking(false); }}
+                className="press w-full text-left p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[13.5px] text-[var(--text)]">
+                “{o.thought}”
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2.5 mt-7">
+        <Button variant="soft" onClick={() => onEdit(t)}><IconPen size={17} />Edit categorisation</Button>
+        <Button variant="outline" onClick={() => onReflect(t)}><IconSpark size={17} />Reflect on this</Button>
+        <Button variant="outline" onClick={() => onExercise(t)}><IconWave size={17} />Trigger exercise</Button>
+      </div>
+    </Sheet>
+  );
+}
+
+/* Rename / add / remove / merge the user's categories */
+function CategoryManager({ open, onClose, cats, setCats, thoughts, onUpdate, toast }) {
+  const [mergeFrom, setMergeFrom] = useState(null);
+  if (!open) return null;
+  const count = (id) => thoughts.filter(t => t.cats.includes(id)).length;
+
+  const rename = (id, label) => setCats(prev => prev.map(c => c.id === id ? { ...c, label } : c));
+  const remove = (id) => {
+    thoughts.filter(t => t.cats.includes(id)).forEach(t => onUpdate({ ...t, cats: t.cats.filter(x => x !== id) }));
+    setCats(prev => prev.filter(c => c.id !== id));
+    toast("Category removed");
+  };
+  const merge = (from, to) => {
+    thoughts.filter(t => t.cats.includes(from)).forEach(t =>
+      onUpdate({ ...t, cats: [...new Set(t.cats.map(x => x === from ? to : x))] }));
+    setCats(prev => prev.filter(c => c.id !== from));
+    setMergeFrom(null); toast("Categories merged");
+  };
+  const add = () => {
+    const id = "cat_" + Date.now();
+    setCats(prev => [...prev, { id, label: "New category", hue: 250, ai: false }]);
+  };
+
+  return (
+    <Sheet open onClose={onClose} title="Categories" full>
+      <p className="text-[13px] text-[var(--muted)] leading-relaxed mb-4">
+        Categories are your own way of grouping thoughts — not diagnoses. Rename, merge or remove them freely.
+      </p>
+      <div className="space-y-2.5">
+        {cats.map(c => (
+          <div key={c.id} className="p-3.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)]">
+            <div className="flex items-center gap-2.5">
+              <span className="w-3 h-3 rounded-full shrink-0" style={{ background: `hsl(${c.hue} 55% 55%)` }} />
+              <input value={c.label} onChange={e => rename(c.id, e.target.value)}
+                className="flex-1 bg-transparent text-[15px] text-[var(--text)] min-w-0" />
+              <span className="mono text-[9.5px] text-[var(--muted)]">{count(c.id)}</span>
+              {c.ai && <span className="mono text-[8.5px] text-[var(--accent)]">AI</span>}
+            </div>
+            <div className="flex gap-2 mt-2.5">
+              <button onClick={() => setMergeFrom(mergeFrom === c.id ? null : c.id)}
+                className="press text-[12px] px-2.5 py-1 rounded-full border border-[var(--border)] text-[var(--muted)]">Merge…</button>
+              <button onClick={() => remove(c.id)}
+                className="press text-[12px] px-2.5 py-1 rounded-full border border-[var(--border)] text-red-500 flex items-center gap-1">
+                <IconTrash size={12} />Remove</button>
+            </div>
+            {mergeFrom === c.id && (
+              <div className="flex flex-wrap gap-2 mt-2.5 anim-up">
+                <span className="text-[12px] text-[var(--muted)] w-full">Merge into:</span>
+                {cats.filter(x => x.id !== c.id).map(x => (
+                  <Chip key={x.id} onClick={() => merge(c.id, x.id)}>{x.label}</Chip>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <Button variant="outline" className="w-full mt-4" onClick={add}><IconPlus size={17} />Add category</Button>
+    </Sheet>
+  );
+}
+
+/* Guided categorisation — the step-by-step stand-in for the chatbot flow.
+   Produces a fully-formed thought: text, trigger, emotion(s), compulsion(s),
+   and one or more categories (with an AI suggestion the user can change). */
+function CategoriseWizard({ base, cats, onNewCat, onClose, onDone }) {
+  const blank = { thought: "", trig: [], emo: [], comp: [], cats: [] };
+  const [d, setD] = useState(blank);
+  const [step, setStep] = useState(0);
+  useEffect(() => { if (base) { setD({ ...blank, ...base }); setStep(0); } }, [base]);
+  if (!base) return null;
+
+  const toggle = (key, id) => setD(s => ({
+    ...s, [key]: s[key].includes(id) ? s[key].filter(x => x !== id) : [...s[key], id],
+  }));
+  const single = (key, id) => setD(s => ({ ...s, [key]: [id] }));
+
+  /* naive suggestion: a category whose typical emotion matches */
+  const suggestCat = () => {
+    if (d.emo.includes("e_fear")) return "cat_safety";
+    if (d.comp.includes("c_reask") || d.comp.includes("c_check")) return "cat_certainty";
+    if (d.emo.includes("e_shame") || d.emo.includes("e_guilt")) return "cat_morality";
+    return cats[0].id;
+  };
+
+  const steps = ["thought", "trig", "emo", "comp", "cats"];
+  const s = steps[step];
+
+  const finish = () => {
+    const suggested = d.cats.length ? d.cats : [suggestCat()];
+    onDone(mk2({ ...d, cats: suggested, id: base.id || "t" + Date.now(),
+      date: base.date || new Date().toISOString(), intensity: base.intensity || 6,
+      note: base.note || "", _new: !base.id }));
+  };
+
+  return (
+    <Sheet open onClose={onClose} title={base.id ? "Edit categorisation" : "Add a thought"} full>
+      <div className="flex gap-1.5 mb-6">
+        {steps.map((_, i) => (
+          <div key={i} className="h-1 flex-1 rounded-full" style={{ background: i <= step ? "var(--accent)" : "var(--border)" }} />
+        ))}
+      </div>
+
+      <div key={step} className="anim-up">
+        <div className="flex gap-2.5 mb-5">
+          <div className="w-7 h-7 rounded-full bg-[var(--soft)] grid place-items-center text-[var(--accent)] shrink-0 mt-0.5"><IconSpark size={15} /></div>
+          <p className="text-[17px] leading-snug text-[var(--text)]">
+            {s === "thought" && "What was the thought, in your words?"}
+            {s === "trig" && "What set it off?"}
+            {s === "emo" && "What emotion was present? (Pick any that fit.)"}
+            {s === "comp" && "Did you do something to relieve it?"}
+            {s === "cats" && "Where does this belong? You can choose more than one."}
+          </p>
+        </div>
+
+        {s === "thought" && (
+          <textarea value={d.thought} onChange={e => setD(x => ({ ...x, thought: e.target.value }))} autoFocus
+            placeholder="The intrusive thought, doubt or image"
+            className="w-full h-28 rounded-2xl p-4 bg-[var(--surface-2)] border border-[var(--border)] text-[15px] text-[var(--text)] placeholder:text-[var(--muted)] resize-none" />
+        )}
+        {s === "trig" && (
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(TRIGGERS).map(([id, l]) => <Chip key={id} active={d.trig.includes(id)} onClick={() => single("trig", id)}>{l}</Chip>)}
+          </div>
+        )}
+        {s === "emo" && (
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(EMOTIONS_D).map(([id, l]) => <Chip key={id} active={d.emo.includes(id)} onClick={() => toggle("emo", id)}>{l}</Chip>)}
+          </div>
+        )}
+        {s === "comp" && (
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(COMPULSIONS).map(([id, l]) => <Chip key={id} active={d.comp.includes(id)} onClick={() => toggle("comp", id)}>{l}</Chip>)}
+          </div>
+        )}
+        {s === "cats" && (
+          <>
+            <p className="text-[13px] text-[var(--muted)] mb-3">
+              {APP} suggests <span className="text-[var(--accent)]">{catOf(suggestCat(), cats).label}</span>. Confirm or change it.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {cats.map(c => <Chip key={c.id} active={(d.cats.length ? d.cats : [suggestCat()]).includes(c.id)} onClick={() => toggle("cats", c.id)}>{c.label}</Chip>)}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mt-7">
+        <Button variant="outline" onClick={() => step === 0 ? onClose() : setStep(step - 1)}>{step === 0 ? "Cancel" : "Back"}</Button>
+        {step < steps.length - 1
+          ? <Button onClick={() => setStep(step + 1)} disabled={s === "thought" && !d.thought.trim()}>Continue</Button>
+          : <Button onClick={finish}><IconCheck size={17} sw={2.2} />Confirm</Button>}
+      </div>
+    </Sheet>
+  );
+}
+
+/* build a rich thought (with flat display fields) from wizard draft */
+const mk2 = (o) => ({
+  ...o,
+  trigger:    o.trig[0] ? TRIGGERS[o.trig[0]] : "Not yet recorded",
+  emotion:    o.emo[0] ? EMOTIONS_D[o.emo[0]] : "Unease",
+  compulsion: o.comp[0] ? COMPULSIONS[o.comp[0]] : "Not yet recorded",
+  category:   o.cats[0],
+  related: [],
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SCREEN 4 · REFLECTION TIME
+   ═══════════════════════════════════════════════════════════════════════ */
+function ReflectScreen({ go, openMenu, thoughts, memos, preset }) {
+  const [stage, setStage] = useState("choose");     // choose | pickThought | talk
+  const [subject, setSubject] = useState(null);
+  const [step, setStep] = useState(0);
+  const chat = useChat();
+
+  /* context the model reflects against: the focus item plus prior records */
+  const ctx = (subjectObj = subject) => buildContext(thoughts,
+    subjectObj?.thought ? `FOCUS THOUGHT: "${subjectObj.thought.thought}"` : "");
+
+  const begin = (label, subjectObj) => {
+    setSubject(subjectObj); setStage("talk"); setStep(0);
+    chat.setMsgs([]);
+    chat.send(label, { mode: "reflect", context: ctx(subjectObj) });
+  };
+
+  /* arrived here from a thought on the MindMap → open it straight away */
+  useEffect(() => {
+    if (preset) begin(`Let's look at: “${preset.thought}”`, { label: "From your MindMap", thought: preset });
+  }, [preset]);
+
+  const answer = (text) => {
+    setStep(s => s + 1);
+    chat.send(text, { mode: "reflect", context: ctx() });
+  };
+
+  if (stage === "talk") {
+    /* reflection stays bounded — the closing actions appear once the record
+       has been walked through, just as the scripted version did */
+    const done = step >= REFLECTION_SCRIPT.length - 1;
+    const last = chat.msgs[chat.msgs.length - 1];
+    const chips = (!chat.typing && last?.from === "bot" && last.chips) || [];
+    return (
+      <>
+        <Header title="Reflection Time" subtitle={subject?.label} onBack={() => setStage("choose")} onAvatar={() => go("profile")} />
+        <div className="scroll flex-1 px-5 pb-2 space-y-2.5">
+          {subject?.memo && <div className="mb-4"><MemoCard memo={subject.memo} /></div>}
+          {subject?.thought && (
+            <Card className="p-4 mb-4">
+              <div className="text-[11px] uppercase tracking-wide text-[var(--muted)]">Reflecting on</div>
+              <div className="text-[15px] text-[var(--text)] mt-1.5 leading-snug">“{subject.thought.thought}”</div>
+            </Card>
+          )}
+          {chat.msgs.map(m => <Bubble key={m.id} m={m} />)}
+          {chat.typing && <Typing />}
+          {!chat.typing && chips.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1 anim-up">
+              {chips.map(c => <Chip key={c} onClick={() => answer(c)}>{c}</Chip>)}
+            </div>
+          )}
+          {done && !chat.typing && (
+            <div className="pt-3 anim-up space-y-2.5">
+              <Button variant="soft" onClick={() => go("map")}><IconMap size={17} />Open the map</Button>
+              <Button variant="outline" onClick={() => { setStage("choose"); chat.setMsgs([]); }}>Reflect on something else</Button>
+            </div>
+          )}
+          <div ref={chat.endRef} className="h-2" />
+        </div>
+        <Composer placeholder="Type or dictate" onSend={answer} />
+      </>
+    );
+  }
+
+  if (stage === "pickThought") {
+    return (
+      <>
+        <Header title="Previous thoughts" subtitle="From your MindMap" onBack={() => setStage("choose")} onAvatar={() => go("profile")} />
+        <div className="scroll flex-1 px-5 pb-6 space-y-3 stagger">
+          {thoughts.map(t => (
+            <Card key={t.id} className="p-4 press cursor-pointer"
+                  onClick={() => begin(`Let's look at: “${t.thought}”`, { label: catOf(t.category).label, thought: t })}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="w-2 h-2 rounded-full" style={{ background: `hsl(${catOf(t.category).hue} 55% 55%)` }} />
+                <span className="text-[11.5px] text-[var(--muted)]">{catOf(t.category).label}</span>
+                <span className="text-[11.5px] text-[var(--muted)] ml-auto">{fmtDate(t.date)}</span>
+              </div>
+              <div className="text-[15px] text-[var(--text)] leading-snug">“{t.thought}”</div>
+            </Card>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  const latest = memos[0];
+  return (
+    <>
+      <Header title="Reflection Time" onMenu={openMenu} onAvatar={() => go("profile")} />
+      <div className="scroll flex-1 px-5 pb-2">
+        <h2 className="text-[26px] leading-tight font-light tracking-tight text-[var(--text)] mt-3 mb-7">
+          What would you like<br />to reflect on?
+        </h2>
+
+        <div className="stagger space-y-3">
+          <button onClick={() => begin("Let's go through my latest voice memo.", { label: "Latest voice memo", memo: latest })}
+            className="press w-full text-left rounded-3xl p-4 bg-[var(--surface)] border border-[var(--border)]"
+            style={{ boxShadow: "var(--shadow)" }}>
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-full grid place-items-center bg-[var(--accent)] text-[var(--on-accent)] shrink-0">
+                <IconPlay size={19} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[15.5px] font-medium text-[var(--text)]">The latest voice memo</div>
+                <div className="text-[12.5px] text-[var(--muted)] mt-0.5 truncate">
+                  {latest.title} · {fmtDur(latest.duration)} · {fmtDate(latest.date)}
+                </div>
+              </div>
+            </div>
+          </button>
+
+          <button onClick={() => setStage("pickThought")}
+            className="press w-full text-left rounded-3xl p-4 bg-[var(--surface)] border border-[var(--border)] flex items-center gap-3.5"
+            style={{ boxShadow: "var(--shadow)" }}>
+            <div className="w-11 h-11 rounded-2xl grid place-items-center bg-[var(--soft)] text-[var(--accent)] shrink-0">
+              <IconMap size={20} />
+            </div>
+            <div className="flex-1">
+              <div className="text-[15.5px] font-medium text-[var(--text)]">A previous thought</div>
+              <div className="text-[12.5px] text-[var(--muted)] mt-0.5">{thoughts.length} saved in your map</div>
+            </div>
+            <IconChev size={18} className="text-[var(--muted)]" />
+          </button>
+
+          <button onClick={() => begin("I'd like to start with something else.", { label: "Something else" })}
+            className="press w-full text-left rounded-3xl p-4 bg-[var(--surface)] border border-[var(--border)] flex items-center gap-3.5"
+            style={{ boxShadow: "var(--shadow)" }}>
+            <div className="w-11 h-11 rounded-2xl grid place-items-center bg-[var(--soft)] text-[var(--accent)] shrink-0">
+              <IconSpark size={20} />
+            </div>
+            <div className="flex-1">
+              <div className="text-[15.5px] font-medium text-[var(--text)]">Something else</div>
+              <div className="text-[12.5px] text-[var(--muted)] mt-0.5">Start from wherever you are</div>
+            </div>
+            <IconChev size={18} className="text-[var(--muted)]" />
+          </button>
+        </div>
+
+        <p className="text-[13px] text-[var(--muted)] mt-7 text-center leading-relaxed">
+          For something else, type or dictate to begin.
+        </p>
+      </div>
+      <Composer placeholder="Type" onSend={(t) => begin(t, { label: "Something else" })} />
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SCREEN 5 · COMPULSION TRIGGER EXERCISE
+   ═══════════════════════════════════════════════════════════════════════ */
+const EXERCISE_STEPS = ["scenario", "thought", "compulsion", "before", "sit", "after", "summary"];
+
+function ExerciseScreen({ go, openMenu, thoughts, preset, toast }) {
+  const [scenario, setScenario] = useState(preset || thoughts[0]);
+  const [picking, setPicking] = useState(false);
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState({ thought: "", compulsion: "" });
+  const [before, setBefore] = useState(7);
+  const [after, setAfter] = useState(4);
+
+  /* the sit-with-it timer */
+  const TOTAL = 120;
+  const [left, setLeft] = useState(TOTAL);
+  const [running, setRunning] = useState(false);
+  const tick = useRef(null);
+
+  useEffect(() => {
+    if (!running) { clearInterval(tick.current); return; }
+    tick.current = setInterval(() => setLeft(l => {
+      if (l <= 1) { clearInterval(tick.current); setRunning(false); return 0; }
+      return l - 1;
+    }), 1000);
+    return () => clearInterval(tick.current);
+  }, [running]);
+
+  useEffect(() => { if (preset) { setScenario(preset); setStep(0); } }, [preset]);
+
+  const name = EXERCISE_STEPS[step];
+  const next = () => setStep(s => Math.min(s + 1, EXERCISE_STEPS.length - 1));
+  const back = () => step === 0 ? go("home") : setStep(s => s - 1);
+
+  const stopAll = () => { setRunning(false); clearInterval(tick.current); toast("Exercise stopped — that's fine"); go("home"); };
+
+  return (
+    <>
+      <Header title="Trigger Exercise" subtitle={`Step ${step + 1} of ${EXERCISE_STEPS.length}`}
+              onBack={back} onAvatar={() => go("profile")} />
+
+      <div className="shrink-0 px-5 pb-4 flex gap-1.5">
+        {EXERCISE_STEPS.map((_, i) => (
+          <div key={i} className="h-1 flex-1 rounded-full transition-colors"
+               style={{ background: i <= step ? "var(--accent)" : "var(--border)" }} />
+        ))}
+      </div>
+
+      <div className="scroll flex-1 px-5 pb-6">
+        <div key={name} className="anim-up">
+
+          {name === "scenario" && (
+            <>
+              <p className="text-[13px] text-[var(--muted)] mb-3">A situation from your map</p>
+              <Card className="p-5 bg-[var(--soft)]">
+                <div className="text-[11px] uppercase tracking-wide text-[var(--accent)]">Scenario</div>
+                <p className="text-[19px] leading-snug text-[var(--text)] mt-2">
+                  You are {scenario.trigger.toLowerCase()} and the thought arrives: “{scenario.thought}”
+                </p>
+              </Card>
+              <button onClick={() => setPicking(true)} className="press w-full mt-3 text-[13.5px] text-[var(--muted)] py-2">
+                Choose a different scenario
+              </button>
+              <p className="text-[13.5px] text-[var(--muted)] leading-relaxed mt-6">
+                You'll be asked to bring this to mind, notice the urge, and let it pass without acting on it.
+                You can stop at any point.
+              </p>
+              <Button className="w-full mt-6" onClick={next}>Start exercise</Button>
+            </>
+          )}
+
+          {name === "thought" && (
+            <StepPrompt q="Bringing that to mind — what thought appears now?"
+              value={answers.thought} onChange={v => setAnswers(a => ({ ...a, thought: v }))}
+              chips={[scenario.thought, "Something worse than usual", "It feels quieter today"]}
+              onNext={next} />
+          )}
+
+          {name === "compulsion" && (
+            <StepPrompt q="What would you normally do to make it stop?"
+              value={answers.compulsion} onChange={v => setAnswers(a => ({ ...a, compulsion: v }))}
+              chips={[scenario.compulsion, "Ask someone for reassurance", "Check again"]}
+              onNext={next} />
+          )}
+
+          {name === "before" && (
+            <RatingStep title="How strong is the discomfort right now?" value={before} onChange={setBefore}
+                        onNext={next} cta="Begin the pause" />
+          )}
+
+          {name === "sit" && (
+            <div className="flex flex-col items-center pt-4">
+              <p className="text-[15.5px] text-center text-[var(--text)] leading-relaxed max-w-[280px]">
+                Stay with the discomfort. Don't {answers.compulsion ? answers.compulsion.toLowerCase() : "act on the urge"} — just let it be there.
+              </p>
+
+              <div className="relative mt-8 mb-7">
+                <svg width="200" height="200" className="-rotate-90">
+                  <circle cx="100" cy="100" r="88" stroke="var(--border)" strokeWidth="10" fill="none" />
+                  <circle cx="100" cy="100" r="88" stroke="var(--accent)" strokeWidth="10" fill="none"
+                    strokeLinecap="round" strokeDasharray={2 * Math.PI * 88}
+                    strokeDashoffset={2 * Math.PI * 88 * (1 - left / TOTAL)}
+                    style={{ transition: "stroke-dashoffset 1s linear" }} />
+                </svg>
+                <div className="absolute inset-0 grid place-items-center">
+                  <div className="text-center">
+                    <div className="text-[40px] font-light tabular-nums tracking-tight text-[var(--text)]">{fmtDur(left)}</div>
+                    <div className="text-[12.5px] text-[var(--muted)] mt-1">
+                      {running ? "Breathe. It will pass." : left === 0 ? "Done" : "Paused"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-full space-y-2.5">
+                {left > 0 && (
+                  <Button onClick={() => setRunning(r => !r)}>
+                    {running ? <><IconPause size={17} />Pause</> : <><IconPlay size={17} />{left === TOTAL ? "Start" : "Continue"}</>}
+                  </Button>
+                )}
+                <Button variant="soft" onClick={() => { setRunning(false); next(); }}>
+                  {left === 0 ? "Continue" : "Finish early"}
+                </Button>
+                <Button variant="ghost" onClick={stopAll}><IconStop size={16} />Stop exercise</Button>
+              </div>
+            </div>
+          )}
+
+          {name === "after" && (
+            <RatingStep title="How is the discomfort now?" value={after} onChange={setAfter}
+                        hint={`You started at ${before}/10`} onNext={next} cta="See summary" />
+          )}
+
+          {name === "summary" && (
+            <div className="pt-2">
+              <div className="text-center mb-7">
+                <div className="w-16 h-16 rounded-full mx-auto grid place-items-center bg-[var(--soft)] text-[var(--accent)]">
+                  <IconCheck size={30} sw={2} />
+                </div>
+                <h2 className="text-[22px] font-medium text-[var(--text)] mt-4">Exercise complete</h2>
+                <p className="text-[13.5px] text-[var(--muted)] mt-1.5">You stayed with it without acting.</p>
+              </div>
+
+              <Card className="p-5">
+                <div className="flex items-end justify-between gap-6">
+                  {[["Before", before], ["After", after]].map(([l, v]) => (
+                    <div key={l} className="flex-1 text-center">
+                      <div className="h-28 flex items-end justify-center">
+                        <div className="w-12 rounded-t-xl transition-all"
+                             style={{ height: `${v * 10}%`, background: l === "Before" ? "var(--border)" : "var(--accent)" }} />
+                      </div>
+                      <div className="text-[20px] font-medium text-[var(--text)] mt-2 tabular-nums">{v}</div>
+                      <div className="text-[12px] text-[var(--muted)]">{l}</div>
+                    </div>
+                  ))}
+                  <div className="flex-1 text-center">
+                    <div className="text-[30px] font-light tabular-nums"
+                         style={{ color: after <= before ? "var(--accent)" : "var(--muted)" }}>
+                      {after - before > 0 ? "+" : ""}{after - before}
+                    </div>
+                    <div className="text-[12px] text-[var(--muted)] mt-1">change</div>
+                  </div>
+                </div>
+              </Card>
+
+              <div className="mt-4 rounded-3xl border border-[var(--border)] overflow-hidden">
+                {[["Scenario", scenario.trigger], ["Thought", answers.thought || scenario.thought],
+                  ["Urge resisted", answers.compulsion || scenario.compulsion], ["Time sat with it", fmtDur(TOTAL - left)]]
+                  .map(([k, v], i) => (
+                  <div key={k} className={`px-4 py-3 bg-[var(--surface)] ${i ? "border-t border-[var(--border)]" : ""}`}>
+                    <div className="text-[11px] uppercase tracking-wide text-[var(--muted)]">{k}</div>
+                    <div className="text-[14px] text-[var(--text)] mt-0.5">{v}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-2.5 mt-6">
+                <Button onClick={() => { toast("Saved to your map"); go("map"); }}>Save to my map</Button>
+                <Button variant="outline" onClick={() => go("home")}>Back to home</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Sheet open={picking} onClose={() => setPicking(false)} title="Choose a scenario">
+        <div className="space-y-2.5">
+          {thoughts.map(t => (
+            <button key={t.id} onClick={() => { setScenario(t); setPicking(false); }}
+              className="press w-full text-left p-4 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)]">
+              <div className="text-[11.5px] text-[var(--muted)]">{t.trigger}</div>
+              <div className="text-[14.5px] text-[var(--text)] mt-1">“{t.thought}”</div>
+            </button>
+          ))}
+        </div>
+      </Sheet>
+    </>
+  );
+}
+
+function StepPrompt({ q, value, onChange, chips, onNext }) {
+  return (
+    <>
+      <div className="flex gap-2.5 mb-5">
+        <div className="w-7 h-7 rounded-full bg-[var(--soft)] grid place-items-center text-[var(--accent)] shrink-0 mt-0.5">
+          <IconSpark size={15} />
+        </div>
+        <p className="text-[18px] leading-snug text-[var(--text)]">{q}</p>
+      </div>
+      <div className="flex flex-wrap gap-2 mb-4">
+        {chips.filter(Boolean).map(c => <Chip key={c} active={value === c} onClick={() => onChange(c)}>{c}</Chip>)}
+      </div>
+      <textarea value={value} onChange={e => onChange(e.target.value)} placeholder="Or write your own"
+        className="w-full h-28 rounded-2xl p-4 bg-[var(--surface-2)] border border-[var(--border)]
+                   text-[15px] text-[var(--text)] placeholder:text-[var(--muted)] resize-none" />
+      <Button className="w-full mt-5" onClick={onNext} disabled={!value.trim()}>Continue</Button>
+    </>
+  );
+}
+
+function RatingStep({ title, value, onChange, onNext, cta, hint }) {
+  const labels = ["None", "Mild", "Noticeable", "Strong", "Overwhelming"];
+  return (
+    <div className="pt-2">
+      <p className="text-[18px] leading-snug text-[var(--text)]">{title}</p>
+      {hint && <p className="text-[13px] text-[var(--muted)] mt-1.5">{hint}</p>}
+
+      <div className="text-center my-10">
+        <div className="text-[64px] font-extralight tabular-nums leading-none text-[var(--accent)]">{value}</div>
+        <div className="text-[13.5px] text-[var(--muted)] mt-2">{labels[Math.min(Math.floor(value / 2.5), 4)]}</div>
+      </div>
+
+      <input type="range" min="0" max="10" value={value}
+        style={{ "--pct": `${value * 10}%` }}
+        onChange={e => onChange(+e.target.value)} />
+      <div className="flex justify-between text-[11.5px] text-[var(--muted)] mt-2 px-0.5">
+        <span>0</span><span>10</span>
+      </div>
+
+      <Button className="w-full mt-9" onClick={onNext}>{cta}</Button>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CHAT SCREEN (home companion, expanded)
+   ═══════════════════════════════════════════════════════════════════════ */
+function ChatScreen({ go, chat, onSend }) {
+  return (
+    <>
+      <Header title="Companion" subtitle="Remembers what you've saved" onBack={() => go("home")} onAvatar={() => go("profile")} />
+      <div className="scroll flex-1 px-5 pb-2 space-y-2.5">
+        {chat.msgs.map(m => (
+          <div key={m.id}>
+            <Bubble m={m} />
+            {m.chips && (
+              <div className="flex flex-wrap gap-2 mt-2.5">
+                {m.chips.map(c => <Chip key={c} onClick={() => onSend(c)}>{c}</Chip>)}
+              </div>
+            )}
+          </div>
+        ))}
+        {chat.typing && <Typing />}
+        <div ref={chat.endRef} className="h-2" />
+      </div>
+      <Composer placeholder="What is on your mind?" onSend={onSend} />
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PROFILE + SETTINGS
+   ═══════════════════════════════════════════════════════════════════════ */
+function ProfileScreen({ go, openMenu, thoughts, memos, openSetting }) {
+  const stats = [
+    ["Thoughts", thoughts.length],
+    ["Memos", memos.length],
+    ["Exercises", 6],
+  ];
+  return (
+    <>
+      <Header title="Profile" onMenu={openMenu} onAvatar={() => {}} />
+      <div className="scroll flex-1 px-5 pb-6">
+        <div className="flex flex-col items-center pt-4 pb-7">
+          <img src={USER.avatar} className="w-24 h-24 rounded-full object-cover border-2 border-[var(--border)]" alt="" />
+          <div className="text-[20px] font-medium text-[var(--text)] mt-3.5">{USER.fullName}</div>
+          <div className="text-[13px] text-[var(--muted)] mt-0.5">Here since {USER.since}</div>
+        </div>
+
+        <Card className="p-4 flex">
+          {stats.map(([l, v], i) => (
+            <div key={l} className={`flex-1 text-center ${i ? "border-l border-[var(--border)]" : ""}`}>
+              <div className="text-[22px] font-medium text-[var(--text)] tabular-nums">{v}</div>
+              <div className="text-[12px] text-[var(--muted)] mt-0.5">{l}</div>
+            </div>
+          ))}
+        </Card>
+
+        <div className="mt-6">
+          <SectionLabel>Appearance</SectionLabel>
+          <Card className="p-5"><AppearanceControls /></Card>
+        </div>
+
+        <div className="mt-6">
+          <SectionLabel>Account</SectionLabel>
+          <Card className="overflow-hidden">
+            {MENU_ITEMS.filter(m => m.id !== "appearance").map((m, i) => (
+              <button key={m.id} onClick={() => openSetting(m)}
+                className={`press w-full px-4 py-3.5 flex items-center gap-3 text-left
+                            ${i ? "border-t border-[var(--border)]" : ""}`}>
+                <span className={`text-[14.5px] flex-1 ${m.danger ? "text-red-500" : "text-[var(--text)]"}`}>{m.label}</span>
+                <IconChev size={16} className="text-[var(--muted)]" />
+              </button>
+            ))}
+          </Card>
+        </div>
+        <p className="text-[11.5px] text-[var(--muted)] text-center mt-6">Prototype · no data leaves this device</p>
+      </div>
+    </>
+  );
+}
+
+const SectionLabel = ({ children }) => (
+  <div className="text-[11.5px] uppercase tracking-wider text-[var(--muted)] mb-2 px-1">{children}</div>
+);
+
+/* The control that makes the app take on the person's own colour */
+function AppearanceControls() {
+  const { mode, setMode, accent, setAccent } = useTheme();
+  return (
+    <>
+      <div className="text-[13px] text-[var(--muted)] mb-2.5">Mode</div>
+      <div className="flex p-1 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] mb-6">
+        {[["light", "Light"], ["dark", "Dark"]].map(([id, l]) => (
+          <button key={id} onClick={() => setMode(id)}
+            className={`press flex-1 py-2.5 rounded-xl text-[14px] font-medium
+              ${mode === id ? "bg-[var(--surface)] text-[var(--text)]" : "text-[var(--muted)]"}`}
+            style={mode === id ? { boxShadow: "var(--shadow)" } : {}}>{l}</button>
+        ))}
+      </div>
+
+      <div className="text-[13px] text-[var(--muted)] mb-3">Colour</div>
+      <div className="grid grid-cols-3 gap-3">
+        {ACCENTS.map(a => (
+          <button key={a.id} onClick={() => setAccent(a.id)}
+            className={`press rounded-2xl py-3 flex flex-col items-center gap-2 border
+              ${accent === a.id ? "border-[var(--accent)] bg-[var(--soft)]" : "border-[var(--border)] bg-[var(--surface-2)]"}`}>
+            <span className="w-7 h-7 rounded-full grid place-items-center" style={{ background: a.swatch }}>
+              {accent === a.id && <IconCheck size={15} sw={2.6} className="text-white" />}
+            </span>
+            <span className="text-[11.5px] text-[var(--muted)]">{a.label}</span>
+          </button>
+        ))}
+      </div>
+      <p className="text-[12px] text-[var(--muted)] mt-4 leading-relaxed">
+        The whole app follows this — surfaces, text and highlights are derived from your colour.
+      </p>
+    </>
+  );
+}
+
+const MENU_ITEMS = [
+  { id: "account",    label: "Account settings" },
+  { id: "profile",    label: "Profile" },
+  { id: "appearance", label: "Appearance" },
+  { id: "privacy",    label: "Privacy settings" },
+  { id: "terms",      label: "Terms and conditions" },
+  { id: "delete",     label: "Delete account", danger: true },
+  { id: "logout",     label: "Log out", danger: true },
+];
+
+function SideMenu({ open, onClose, go, openSetting }) {
+  if (!open) return null;
+  return (
+    <div className="absolute inset-0 z-50 anim-in">
+      <div className="absolute inset-0 bg-black/35" onClick={onClose} />
+      <div className="anim-drawer absolute inset-y-0 left-0 w-[78%] bg-[var(--surface)] border-r border-[var(--border)] flex flex-col">
+        <div className="p-5 pt-8 flex items-center gap-3.5 border-b border-[var(--border)]">
+          <img src={USER.avatar} className="w-12 h-12 rounded-full object-cover" alt="" />
+          <div className="min-w-0">
+            <div className="text-[15.5px] font-medium text-[var(--text)] truncate">{USER.fullName}</div>
+            <div className="text-[12.5px] text-[var(--muted)]">{USER.handle}</div>
+          </div>
+          <button onClick={onClose} className="press ml-auto text-[var(--muted)] p-1"><IconClose size={20} /></button>
+        </div>
+
+        <div className="scroll flex-1 py-3">
+          {MENU_ITEMS.map(m => (
+            <button key={m.id} onClick={() => { onClose(); m.id === "profile" ? go("profile") : openSetting(m); }}
+              className="press w-full px-5 py-3.5 text-left flex items-center">
+              <span className={`text-[15px] ${m.danger ? "text-red-500" : "text-[var(--text)]"}`}>{m.label}</span>
+              <IconChev size={16} className="ml-auto text-[var(--muted)]" />
+            </button>
+          ))}
+        </div>
+        <div className="p-5 text-[11.5px] text-[var(--muted)] border-t border-[var(--border)]">
+          LVMINVS · prototype build
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Placeholder settings sheets — enough to show what each will hold */
+function SettingSheet({ item, onClose, toast }) {
+  if (!item) return null;
+
+  const body = {
+    account: (
+      <div className="space-y-3">
+        {[["Name", USER.fullName], ["Email", "nico@example.com"], ["Password", "••••••••"], ["Language", "English (UK)"]]
+          .map(([k, v]) => (
+          <div key={k} className="flex items-center justify-between p-4 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)]">
+            <div>
+              <div className="text-[11.5px] text-[var(--muted)]">{k}</div>
+              <div className="text-[14.5px] text-[var(--text)] mt-0.5">{v}</div>
+            </div>
+            <IconPen size={17} className="text-[var(--muted)]" />
+          </div>
+        ))}
+      </div>
+    ),
+    appearance: <AppearanceControls />,
+    privacy: (
+      <div className="space-y-3">
+        {[["Keep recordings on device only", true], ["Allow pattern suggestions", true],
+          ["Anonymous usage statistics", false], ["Require Face ID to open", false]].map(([l, on]) => (
+          <ToggleRow key={l} label={l} defaultOn={on} />
+        ))}
+        <p className="text-[12.5px] text-[var(--muted)] leading-relaxed pt-2">
+          In the prototype these are illustrative. They mark the decisions a real build will need to make about
+          where audio lives and what may leave the device.
+        </p>
+      </div>
+    ),
+    terms: (
+      <div className="text-[13.5px] text-[var(--muted)] leading-relaxed space-y-3">
+        <p>This is a prototype. It is not a medical device and does not provide diagnosis or treatment.</p>
+        <p>Everything shown is sample content held in your browser. Nothing is transmitted or stored elsewhere.</p>
+        <p>The full terms, privacy notice and data-processing basis will be written before any real release.</p>
+      </div>
+    ),
+    delete: (
+      <div>
+        <p className="text-[14.5px] text-[var(--text)] leading-relaxed">
+          Deleting your account removes your thoughts, recordings and reflections. This cannot be undone.
+        </p>
+        <div className="space-y-2.5 mt-6">
+          <Button className="!bg-red-500" onClick={() => { onClose(); toast("Nothing was deleted — prototype"); }}>
+            Delete everything
+          </Button>
+          <Button variant="outline" onClick={onClose}>Keep my account</Button>
+        </div>
+      </div>
+    ),
+    logout: (
+      <div>
+        <p className="text-[14.5px] text-[var(--text)]">Log out of this device?</p>
+        <div className="space-y-2.5 mt-6">
+          <Button onClick={() => { onClose(); toast("Logged out — prototype"); }}>Log out</Button>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
+    ),
+  }[item.id] || <p className="text-[14px] text-[var(--muted)]">Placeholder screen.</p>;
+
+  return <Sheet open onClose={onClose} title={item.label}>{body}</Sheet>;
+}
+
+function ToggleRow({ label, defaultOn }) {
+  const [on, setOn] = useState(defaultOn);
+  return (
+    <button onClick={() => setOn(o => !o)}
+      className="press w-full flex items-center gap-3 p-4 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)]">
+      <span className="text-[14px] text-[var(--text)] text-left flex-1">{label}</span>
+      <span className="w-11 h-6.5 rounded-full p-0.5 transition-colors shrink-0"
+            style={{ height: 26, background: on ? "var(--accent)" : "var(--border)" }}>
+        <span className="block w-[22px] h-[22px] rounded-full bg-white transition-transform"
+              style={{ transform: on ? "translateX(18px)" : "none" }} />
+      </span>
+    </button>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   NAVIGATION SHELL
+   ═══════════════════════════════════════════════════════════════════════ */
+const NAV = [
+  { id: "home",     label: "Home",    Icon: IconHome },
+  { id: "capture",  label: "Capture", Icon: IconMic },
+  { id: "map",      label: "Map",     Icon: IconMap },
+  { id: "reflect",  label: "Reflect", Icon: IconSpark },
+  { id: "profile",  label: "Profile", Icon: IconUser },
+];
+
+function BottomNav({ screen, go }) {
+  const active = screen === "chat" ? "home" : screen === "exercise" ? "map" : screen;
+  return (
+    <div className="shrink-0 px-3 pb-5 pt-1.5 border-t border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-xl">
+      <div className="flex">
+        {NAV.map(({ id, label, Icon }) => {
+          const on = active === id;
+          return (
+            <button key={id} onClick={() => go(id)}
+              className="press flex-1 flex flex-col items-center gap-1 py-1.5"
+              style={{ color: on ? "var(--accent)" : "var(--muted)" }}>
+              <Icon size={22} sw={on ? 1.9 : 1.5} />
+              <span className="text-[10px]" style={{ fontWeight: on ? 600 : 400 }}>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [screen, setScreen] = useState("home");
+  const [menu, setMenu] = useState(false);
+  const [setting, setSetting] = useState(null);
+  const [toastMsg, setToastMsg] = useState("");
+  const [thoughts, setThoughts] = useState(THOUGHTS);
+  const [memos, setMemos] = useState(MEMOS);
+  const [cats, setCats] = useState(CATEGORIES);
+  const [connections, setConnections] = useState(CONNECTIONS);
+  const [exercisePreset, setExercisePreset] = useState(null);
+  const [reflectPreset, setReflectPreset] = useState(null);
+  const replyIdx = useRef(0);
+
+  const homeChat = useChat();
+
+  const toast = (m) => { setToastMsg(m); setTimeout(() => setToastMsg(""), 2400); };
+
+  const go = (s, opts) => {
+    if (opts?.scenario) setExercisePreset(opts.scenario);
+    if (s === "reflect") setReflectPreset(opts?.thought || null);
+    setScreen(s);
+  };
+
+  const sendToCompanion = (text) => {
+    homeChat.send(text, { mode: "home", context: buildContext(thoughts) });
+    if (screen === "home") setScreen("chat");
+  };
+
+  const saveMemo = (m) => setMemos(prev => [m, ...prev]);
+
+  /* Find or create the category the model named, and return its id. */
+  const resolveCat = (label) => {
+    const clean = (label || "").trim();
+    if (!clean) return "cat_safety";
+    const hit = cats.find(c => c.label.toLowerCase() === clean.toLowerCase());
+    if (hit) return hit.id;
+    const id = "cat_" + clean.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    setCats(prev => prev.some(c => c.id === id) ? prev
+      : [...prev, { id, label: clean, hue: (prev.length * 53 + 195) % 360 }]);
+    return id;
+  };
+
+  /* Everything the companion extracts lands here: the MindMap grows with the
+     conversation, and a suggested pattern arrives as a hypothesis to accept. */
+  const ingestAI = (data) => {
+    const t = data?.thought;
+    if (!t?.thought) return;
+    const catId = resolveCat(t.category);
+    const id = "t" + Date.now();
+    setThoughts(prev => [{
+      id, thought: t.thought, cats: [catId], category: catId,
+      trig: [], emo: [], comp: [],
+      trigger: t.trigger || "Not yet recorded",
+      emotion: t.emotion || "Unease",
+      compulsion: t.compulsion || "Not yet recorded",
+      intensity: Math.max(1, Math.min(10, +t.intensity || 5)),
+      note: t.note || "Captured with the companion.",
+      date: new Date().toISOString(), related: [], ai: true,
+    }, ...prev]);
+    if (data.pattern?.basis && thoughts[0]) {
+      setConnections(prev => [{
+        id: "k" + Date.now(), a: id, b: thoughts[0].id,
+        basis: data.pattern.basis,
+        strength: STRENGTH[data.pattern.strength] ? data.pattern.strength : "tentative",
+        source: "ai", status: "suggested",
+      }, ...prev]);
+    }
+    toast("Added to your MindMap");
+  };
+  useEffect(() => { AI_SINK.ingest = ingestAI; });
+
+  const saveThought = (text) => {
+    const id = "t" + Date.now();
+    setThoughts(prev => [{
+      id, cats: ["cat_safety"], category: "cat_safety",
+      trig: [], emo: [], comp: [], trigger: "Not yet categorised",
+      thought: text, emotion: "Unease", compulsion: "Not yet recorded",
+      note: "Captured from the companion — categorise it when ready.",
+      date: new Date().toISOString(), intensity: 5, related: [],
+    }, ...prev]);
+    /* ask the companion to structure the capture, then fill the card in place */
+    askCompanion({ mode: "capture", context: buildContext(thoughts), history: [{ role: "user", content: text }] })
+      .then(d => {
+        const t = d?.thought;
+        if (!t) return;
+        const catId = resolveCat(t.category);
+        upsertThought({
+          id, cats: [catId], category: catId,
+          trigger: t.trigger || "Not yet categorised",
+          emotion: t.emotion || "Unease",
+          compulsion: t.compulsion || "Not yet recorded",
+          intensity: Math.max(1, Math.min(10, +t.intensity || 5)),
+          note: t.note || "Captured — categorised by the companion.",
+        });
+        toast("Categorised");
+      })
+      .catch(() => {});
+  };
+
+  const upsertThought = (t) => setThoughts(prev => {
+    const i = prev.findIndex(p => p.id === t.id);
+    if (i === -1) return [t, ...prev];
+    const copy = [...prev]; copy[i] = { ...copy[i], ...t }; return copy;
+  });
+
+  const shared = { go, openMenu: () => setMenu(true), thoughts, memos, toast };
+
+  return (
+    <div className="stage">
+      <div className="device">
+        <div className="notch" />
+        <div className="pt-9 flex flex-col flex-1 min-h-0 relative">
+          {screen === "home"     && <HomeScreen {...shared} chat={homeChat} />}
+          {screen === "chat"     && <ChatScreen go={go} chat={homeChat} onSend={sendToCompanion} />}
+          {screen === "capture"  && <CaptureScreen {...shared} onSaveMemo={saveMemo} onSaveThought={saveThought} />}
+          {screen === "map"      && <MapScreen {...shared} onUpdate={upsertThought}
+                                       cats={cats} setCats={setCats} connections={connections} setConnections={setConnections} />}
+          {screen === "reflect"  && <ReflectScreen {...shared} preset={reflectPreset} />}
+          {screen === "exercise" && <ExerciseScreen {...shared} preset={exercisePreset} />}
+          {screen === "profile"  && <ProfileScreen {...shared} openSetting={setSetting} />}
+
+          {/* the home composer lives outside the scroll area, as in the sketch */}
+          {screen === "home" && <Composer placeholder="Type" onSend={sendToCompanion} />}
+
+          <SideMenu open={menu} onClose={() => setMenu(false)} go={go} openSetting={setSetting} />
+          <SettingSheet item={setting} onClose={() => setSetting(null)} toast={toast} />
+          <Toast msg={toastMsg} />
+        </div>
+
+        <BottomNav screen={screen} go={go} />
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <ThemeProvider><App /></ThemeProvider>
+);
+</script>
+</body>
+</html>
