@@ -16,7 +16,7 @@ import pipeline
 from policy import InstructionPlan
 
 HERE = pathlib.Path(__file__).parent
-load_dotenv(HERE.parent / "ocd_prototype_app_example" / ".env")   # reuse existing key
+load_dotenv(HERE / ".env")
 
 client = OpenAI()
 MODEL = os.getenv("OCD_MODEL", "gpt-4o-mini")

@@ -6,6 +6,18 @@ import { IconCheck, IconMic, IconTrash } from "../ui/icons";
 import { Button, Header } from "../ui/primitives";
 import type { ScreenProps } from "./shared";
 
+const RECORD_HINTS = [
+  "the moment it started — where you were, what you were doing",
+  "the exact thought, in your own words",
+  "what your body did — hands, breath, chest",
+];
+
+const WRITE_STARTERS = [
+  "I just checked the lock again and…",
+  "The thought came back while…",
+  "I couldn't stop replaying…",
+];
+
 /* Recording is simulated — a real build stores audio, not a transcript. */
 export function CaptureScreen({ go, onSaveMemo, onSaveThought, toast }: ScreenProps & {
   onSaveMemo: (m: Memo) => void; onSaveThought: (text: string) => void;
@@ -83,6 +95,20 @@ export function CaptureScreen({ go, onSaveMemo, onSaveThought, toast }: ScreenPr
                       <p className="text-[13.5px] text-[var(--muted)] mt-2 max-w-[260px] leading-relaxed">
                         Speak freely. It's saved as audio, not turned into text, so nothing interrupts you.
                       </p>
+
+                      <div className="mt-6 w-full max-w-[320px] mx-auto text-left rounded-2xl p-4 bg-[var(--surface-2)] border border-[var(--border)]">
+                        <div className="text-[11.5px] uppercase tracking-wider text-[var(--muted)] mb-2">Try describing</div>
+                        <ul className="space-y-1.5">
+                          {RECORD_HINTS.map(h => (
+                            <li key={h} className="text-[13px] leading-snug text-[var(--text)] flex gap-2">
+                              <span className="text-[var(--accent)] shrink-0">·</span><span>{h}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="mt-3 text-[11.5px] text-[var(--muted)] leading-relaxed">
+                          One thought at a time. No structure needed — you can label it later.
+                        </div>
+                      </div>
                     </>
                   )}
                 </div>
@@ -110,13 +136,31 @@ export function CaptureScreen({ go, onSaveMemo, onSaveThought, toast }: ScreenPr
             <textarea
               value={text} onChange={e => setText(e.target.value)} autoFocus
               placeholder="What just happened, and what went through your mind?"
-              className="w-full h-64 rounded-3xl p-5 bg-[var(--surface)] border border-[var(--border)]
+              className="w-full h-56 rounded-3xl p-5 bg-[var(--surface)] border border-[var(--border)]
                          text-[15.5px] leading-relaxed text-[var(--text)] placeholder:text-[var(--muted)] resize-none"
               style={{ boxShadow: "var(--shadow)" }} />
             <div className="flex items-center justify-between mt-3 px-1">
               <span className="text-[12px] text-[var(--muted)]">{text.trim().split(/\s+/).filter(Boolean).length} words</span>
               <span className="text-[12px] text-[var(--muted)]">Categorise it later</span>
             </div>
+
+            {!text.trim() && (
+              <div className="mt-4 rounded-2xl p-4 bg-[var(--surface-2)] border border-[var(--border)]">
+                <div className="text-[11.5px] uppercase tracking-wider text-[var(--muted)] mb-2">Not sure where to start?</div>
+                <p className="text-[12.5px] text-[var(--muted)] leading-relaxed mb-3">
+                  Write the moment plainly — the trigger, the thought, what your body did. Full sentences aren't required.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {WRITE_STARTERS.map(s => (
+                    <button key={s} onClick={() => setText(s + " ")}
+                      className="press text-left text-[12.5px] px-3 py-1.5 rounded-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text)]">
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 mt-5">
               <Button variant="outline" onClick={() => go("home")}>Cancel</Button>
               <Button onClick={saveText} disabled={!text.trim()}><IconCheck size={17} sw={2.2} />Save</Button>

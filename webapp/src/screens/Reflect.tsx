@@ -57,7 +57,14 @@ export function ReflectScreen({ go, openMenu, thoughts, memos, preset }: ScreenP
               <div className="text-[15px] text-[var(--text)] mt-1.5 leading-snug">“{subject.thought.thought}”</div>
             </Card>
           )}
-          {chat.msgs.map(m => <Bubble key={m.id} m={m} />)}
+          {chat.msgs.map(m => (
+            <Bubble
+              key={m.id}
+              m={m}
+              onRate={(r, note) => chat.rate(m.id, r, note)}
+              onRateClass={(v, corr) => chat.rateClassification(m.id, v, corr)}
+            />
+          ))}
           {chat.typing && <Typing />}
           {!chat.typing && chips.length > 0 && (
             <div className="flex flex-wrap gap-2 pt-1 anim-up">

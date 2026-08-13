@@ -52,11 +52,28 @@ export interface Memo {
   linked: string | null;
 }
 
+export interface Classification {
+  category?: string;
+  emotion?: string;
+  distortion?: string;
+  compulsion_type?: string;
+  confidence?: number;
+}
+
 export interface Msg {
   id: string;
   from: "me" | "bot";
   text: string;
   chips?: string[] | null;
+  /* per-reply feedback the user leaves on assistant messages */
+  rating?: number;            // 1-5
+  recommendation?: string;    // optional free-form note
+  feedbackSent?: boolean;     // true once posted successfully
+  /* the encoder's read of the user's discomfort, attached to the reply
+     that carried it — the user can then confirm or correct it */
+  classification?: Classification;
+  classVerdict?: "correct" | "off";
+  classCorrection?: string;
 }
 
 /* What /api/companion returns */
@@ -73,6 +90,7 @@ export interface CompanionData {
     note?: string;
   };
   pattern?: { basis: string; strength?: string };
+  _plan?: Classification & { intent?: string; evidence_used?: number };
   error?: string;
 }
 
