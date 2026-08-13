@@ -57,6 +57,10 @@ export interface Msg {
   from: "me" | "bot";
   text: string;
   chips?: string[] | null;
+  /* per-reply feedback the user leaves on assistant messages */
+  rating?: number;            // 1-5
+  recommendation?: string;    // optional free-form note
+  feedbackSent?: boolean;     // true once posted successfully
 }
 
 /* What /api/companion returns */

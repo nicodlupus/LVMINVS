@@ -53,7 +53,7 @@ export function HomeScreen({ go, openMenu, chat }: ScreenProps & { chat: Chat })
 
         {/* running conversation, if any */}
         <div className="mt-6 space-y-2.5">
-          {chat.msgs.map(m => <Bubble key={m.id} m={m} />)}
+          {chat.msgs.map(m => <Bubble key={m.id} m={m} onRate={(r, note) => chat.rate(m.id, r, note)} />)}
           {chat.typing && <Typing />}
           <div ref={chat.endRef} />
         </div>

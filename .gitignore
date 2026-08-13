@@ -6,6 +6,7 @@
 # user data (encrypted vaults, local accounts)
 *.db
 backend/cache/
+backend/feedback.jsonl
 
 # python
 .venv/

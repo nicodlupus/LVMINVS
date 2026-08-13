@@ -13,6 +13,7 @@ export interface Chat {
   msgs: Msg[];
   typing: boolean;
   send: (text: string, opts?: SendOpts) => Promise<CompanionData | undefined>;
+  rate: (id: string, rating: number, recommendation: string) => Promise<void>;
   setMsgs: (arr: Msg[]) => void;
   endRef: React.RefObject<HTMLDivElement>;
 }
@@ -56,5 +57,24 @@ export function useChat(initial: Msg[] = []): Chat {
     }
   }, []);
 
-  return { msgs, typing, send, setMsgs, endRef };
+  /* Record the user's per-reply rating locally and ship it to /api/feedback
+     for later analysis. Only the assistant reply + user's optional note
+     leaves the device — never the user's prompt or any prior message. */
+  const rate = useCallback(async (id: string, rating: number, recommendation: string) => {
+    const reply = msgsRef.current.find(m => m.id === id)?.text ?? "";
+    /* mark optimistically so the UI stays responsive; downgrade on failure */
+    commit(msgsRef.current.map(m => m.id === id ? { ...m, rating, recommendation, feedbackSent: true } : m));
+    try {
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating, recommendation, reply, ts: new Date().toISOString() }),
+      });
+    } catch (e) {
+      console.error("feedback post failed", e);
+      commit(msgsRef.current.map(m => m.id === id ? { ...m, feedbackSent: false } : m));
+    }
+  }, []);
+
+  return { msgs, typing, send, rate, setMsgs, endRef };
 }

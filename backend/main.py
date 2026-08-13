@@ -10,8 +10,10 @@ Same contract the frontend already uses:
 """
 from __future__ import annotations
 
+import json
 import re
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -65,6 +67,41 @@ def companion(body: CompanionIn) -> dict:
                      "category": plan.classification.get("category"),
                      "evidence_used": len(plan.evidence)}
     return data
+
+
+class FeedbackIn(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    recommendation: str = Field(default="", max_length=2000)
+    reply: str = Field(default="", max_length=4000)
+    ts: str = Field(default="", max_length=64)
+
+
+FEEDBACK_LOG = Path(__file__).with_name("feedback.jsonl")
+
+
+@app.post("/api/feedback")
+def feedback(body: FeedbackIn) -> dict:
+    """Append a per-reply rating to feedback.jsonl.
+
+    Deliberately anonymous: the endpoint takes no username, no auth key
+    and no prior message text. The stored row is exactly what the user
+    consented to send — a rating, an optional note, and the reply that
+    the rating is about — so later training / policy work can associate
+    a score with a specific generated response without ever touching the
+    user's own writing.
+    """
+    row = {
+        "rating": body.rating,
+        "recommendation": body.recommendation.strip(),
+        "reply": body.reply,
+        "ts": body.ts or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    try:
+        with FEEDBACK_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"could not persist feedback: {exc}")
+    return {"ok": True}
 
 
 @app.get("/api/health")

@@ -33,3 +33,4 @@ export const IconPen    = (p: IconProps) => <Ic {...p}><path d="M4 20h4L19.5 8.5
 export const IconTrash  = (p: IconProps) => <Ic {...p}><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7l1 13h10l1-13"/></Ic>;
 export const IconFilter = (p: IconProps) => <Ic {...p}><path d="M4 6h16"/><path d="M7 12h10"/><path d="M10 18h4"/></Ic>;
 export const IconWave   = (p: IconProps) => <Ic {...p}><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></Ic>;
+export const IconStar   = (p: IconProps) => <Ic {...p}><path d="M12 3.6l2.55 5.17 5.7.83-4.13 4.02.98 5.68L12 16.6l-5.1 2.7.98-5.68-4.13-4.02 5.7-.83z"/></Ic>;

@@ -1,17 +1,106 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { Msg } from "../types";
-import { IconMic, IconSend } from "./icons";
+import { IconMic, IconSend, IconStar } from "./icons";
 
-export const Bubble = ({ m }: { m: Msg }) => (
-  <div className={`anim-up flex ${m.from === "me" ? "justify-end" : "justify-start"}`}>
+export const Bubble = ({ m, onRate }: {
+  m: Msg;
+  onRate?: (rating: number, recommendation: string) => void;
+}) => (
+  <div className={`anim-up flex flex-col ${m.from === "me" ? "items-end" : "items-start"}`}>
     <div className={`max-w-[80%] px-4 py-3 text-[14.5px] leading-relaxed
       ${m.from === "me"
         ? "bg-[var(--accent)] text-[var(--on-accent)] rounded-[20px] rounded-br-[6px]"
         : "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)] rounded-[20px] rounded-bl-[6px]"}`}>
       {m.text}
     </div>
+    {m.from === "bot" && onRate && m.text !== "…" && !m.text.startsWith("The companion is offline.") && (
+      <Rating msg={m} onRate={onRate} />
+    )}
   </div>
 );
+
+/* Per-reply feedback: 1-5 stars + optional free-form recommendation.
+   Once the user picks a star we surface a small note field; a Send button
+   posts everything to /api/feedback so the ratings can inform the policy
+   and eventually the fine-tuned model that replaces it. */
+function Rating({ msg, onRate }: {
+  msg: Msg;
+  onRate: (rating: number, recommendation: string) => void;
+}) {
+  const [rating, setRating] = useState<number>(msg.rating ?? 0);
+  const [hover, setHover] = useState<number>(0);
+  const [note, setNote] = useState<string>(msg.recommendation ?? "");
+  const [expanded, setExpanded] = useState<boolean>(false);
+  const done = !!msg.feedbackSent;
+
+  const pick = (n: number) => {
+    if (done) return;
+    setRating(n);
+    setExpanded(true);
+  };
+
+  const submit = () => {
+    if (done || !rating) return;
+    onRate(rating, note.trim());
+  };
+
+  const active = hover || rating;
+
+  if (done) {
+    return (
+      <div className="mt-1.5 ml-1 flex items-center gap-1 text-[11.5px] text-[var(--muted)]">
+        <span>Thanks — logged as</span>
+        <span className="text-[var(--accent)]">{"★".repeat(msg.rating ?? 0)}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1.5 ml-1 max-w-[80%] w-full">
+      <div className="flex items-center gap-2">
+        <span className="text-[11.5px] text-[var(--muted)]">How was this?</span>
+        <div className="flex items-center gap-0.5" onMouseLeave={() => setHover(0)}>
+          {[1, 2, 3, 4, 5].map(n => (
+            <button
+              key={n}
+              type="button"
+              aria-label={`Rate ${n} out of 5`}
+              onMouseEnter={() => setHover(n)}
+              onClick={() => pick(n)}
+              className="press p-0.5"
+              style={{ color: n <= active ? "var(--accent)" : "var(--border)" }}>
+              <IconStar size={16} sw={1.4} fill={n <= active ? "currentColor" : "none"} />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-2 rounded-2xl p-3 bg-[var(--surface-2)] border border-[var(--border)] anim-up">
+          <textarea
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="What would have helped? (optional)"
+            className="w-full h-16 bg-transparent text-[12.5px] leading-relaxed
+                       text-[var(--text)] placeholder:text-[var(--muted)] resize-none outline-none"
+          />
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[11px] text-[var(--muted)]">
+              Sent as: rating · this reply · your note. Not your prompt.
+            </span>
+            <button
+              type="button"
+              onClick={submit}
+              className="press text-[12px] font-medium px-3 py-1.5 rounded-full
+                         bg-[var(--accent)] text-[var(--on-accent)]">
+              Send
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export const Typing = () => (
   <div className="flex justify-start anim-in">

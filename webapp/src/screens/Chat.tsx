@@ -10,7 +10,7 @@ export function ChatScreen({ go, chat, onSend }: { go: Go; chat: Chat; onSend: (
       <div className="scroll flex-1 px-5 pb-2 space-y-2.5">
         {chat.msgs.map(m => (
           <div key={m.id}>
-            <Bubble m={m} />
+            <Bubble m={m} onRate={(r, note) => chat.rate(m.id, r, note)} />
             {m.chips && (
               <div className="flex flex-wrap gap-2 mt-2.5">
                 {m.chips.map(c => <Chip key={c} onClick={() => onSend(c)}>{c}</Chip>)}
