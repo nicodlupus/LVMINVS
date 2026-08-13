@@ -81,6 +81,26 @@ The server's complete knowledge of a user is four columns:
 
 ---
 
+## Learning from use
+
+Two endpoints let the app improve without a bespoke study — the app is its own
+evaluation set. Both are anonymous by construction: no username, no auth key,
+no prior message text. Only the assistant reply being judged and what the user
+consciously typed as feedback leave the device.
+
+- `POST /api/feedback` — a per-reply star rating (1-5) with an optional short
+  recommendation. Appended to `backend/feedback.jsonl`.
+- `POST /api/classification-feedback` — the user's verdict on the encoder's
+  read of the discomfort ("correct" or a short "it was more like…").
+  Appended to `backend/classification_feedback.jsonl`.
+
+Both files are gitignored. The UI surfaces the encoder's read inline on the
+last bubble of each turn ("The companion read this as *safety · unease*") so
+the classifier is never invisible — every prediction is presented for
+confirmation or correction.
+
+---
+
 ## Layout
 
 | path | what it is |
@@ -116,9 +136,11 @@ user's plaintext, and that a wrong password yields no data.
 
 ## Roadmap
 
-- Log `(text → plan → reply → accepted/rejected)` locally, then fine-tune a small
-  seq2seq to replace the rule-based policy — the honest path to a model of our own,
-  bootstrapped by the app rather than assumed up front.
+- Fine-tune a small seq2seq on `(reply, rating, classification, verdict, correction)`
+  tuples to replace the rule-based policy — the honest path to a model of our own,
+  bootstrapped by the app rather than assumed up front. Data collection is already
+  running (see *Learning from use*); the `(user text → plan)` half is deliberately
+  excluded so the training signal never contains what the user wrote.
 - Real dictation via the Web Speech API (the microphone is currently simulated).
 - PWA manifest, so it installs on a phone — an app meant to be opened mid-episode
   should be one tap away.
