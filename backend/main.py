@@ -62,9 +62,13 @@ def companion(body: CompanionIn) -> dict:
     except Exception as exc:                       # surfaced in the UI as text
         print(f"[companion] FAILED after {time.perf_counter() - t0:.2f}s: {exc}", flush=True)
         raise HTTPException(status_code=502, detail=str(exc))
+    cls = plan.classification
     data["_plan"] = {"intent": plan.intent,        # visible data-science workflow
-                     "confidence": plan.classification.get("confidence"),
-                     "category": plan.classification.get("category"),
+                     "confidence": cls.get("confidence"),
+                     "category": cls.get("category"),
+                     "emotion": cls.get("emotion"),
+                     "distortion": cls.get("distortion"),
+                     "compulsion_type": cls.get("compulsion_type"),
                      "evidence_used": len(plan.evidence)}
     return data
 
@@ -101,6 +105,43 @@ def feedback(body: FeedbackIn) -> dict:
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"could not persist feedback: {exc}")
+    return {"ok": True}
+
+
+class ClassificationVerdictIn(BaseModel):
+    verdict: str = Field(pattern=r"^(correct|off)$")
+    correction: str = Field(default="", max_length=500)
+    reply: str = Field(default="", max_length=4000)
+    classification: dict = Field(default_factory=dict)
+    ts: str = Field(default="", max_length=64)
+
+
+CLASS_FEEDBACK_LOG = Path(__file__).with_name("classification_feedback.jsonl")
+
+
+@app.post("/api/classification-feedback")
+def classification_feedback(body: ClassificationVerdictIn) -> dict:
+    """Log whether the encoder's read of the user's discomfort was correct.
+
+    This is the training signal for improving the classifier and, later, the
+    fine-tuned policy that replaces the rule-based one. Anonymous by design:
+    no username, no prior message text. We store what the model claimed
+    (category / emotion / etc.), what the user said back ('correct' or 'off'),
+    and — when off — the user's short correction.
+    """
+    allowed = {"category", "emotion", "distortion", "compulsion_type", "confidence"}
+    row = {
+        "verdict": body.verdict,
+        "correction": body.correction.strip(),
+        "reply": body.reply,
+        "classification": {k: v for k, v in body.classification.items() if k in allowed},
+        "ts": body.ts or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    try:
+        with CLASS_FEEDBACK_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"could not persist verdict: {exc}")
     return {"ok": True}
 
 

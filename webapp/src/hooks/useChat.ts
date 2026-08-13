@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AI_SINK, askCompanion, OFFLINE } from "../api/companion";
 import { rid } from "../data/mock";
-import type { CompanionData, CompanionMode, Msg } from "../types";
+import type { Classification, CompanionData, CompanionMode, Msg } from "../types";
 
 export interface SendOpts {
   mode?: CompanionMode;
@@ -14,6 +14,7 @@ export interface Chat {
   typing: boolean;
   send: (text: string, opts?: SendOpts) => Promise<CompanionData | undefined>;
   rate: (id: string, rating: number, recommendation: string) => Promise<void>;
+  rateClassification: (id: string, verdict: "correct" | "off", correction: string) => Promise<void>;
   setMsgs: (arr: Msg[]) => void;
   endRef: React.RefObject<HTMLDivElement>;
 }
@@ -41,9 +42,21 @@ export function useChat(initial: Msg[] = []): Chat {
         history: next.map(m => ({ role: m.from === "me" ? "user" as const : "assistant" as const, content: m.text })),
       });
       const lines = (data.reply || []).filter(Boolean);
+      /* the encoder's classification of THIS turn — attach it to the final
+         bubble so the user can confirm or correct the model's read */
+      const cls: Classification | undefined = data._plan && (data._plan.category || data._plan.emotion)
+        ? {
+            category: data._plan.category,
+            emotion: data._plan.emotion,
+            distortion: data._plan.distortion,
+            compulsion_type: data._plan.compulsion_type,
+            confidence: data._plan.confidence,
+          }
+        : undefined;
       const bots: Msg[] = (lines.length ? lines : ["…"]).map((t, i, all) => ({
         id: rid(), from: "bot", text: t,
         chips: i === all.length - 1 ? (data.chips || []) : null,
+        classification: i === all.length - 1 && t !== "…" ? cls : undefined,
       }));
       commit([...msgsRef.current, ...bots]);
       /* the map/ingest step must never be able to swallow a delivered reply */
@@ -76,5 +89,29 @@ export function useChat(initial: Msg[] = []): Chat {
     }
   }, []);
 
-  return { msgs, typing, send, rate, setMsgs, endRef };
+  /* Was the encoder's read of the discomfort correct? The verdict + any
+     correction the user typed goes to /api/classification-feedback and
+     becomes signal for improving the classifier over time. */
+  const rateClassification = useCallback(async (id: string, verdict: "correct" | "off", correction: string) => {
+    const msg = msgsRef.current.find(m => m.id === id);
+    if (!msg) return;
+    commit(msgsRef.current.map(m => m.id === id ? { ...m, classVerdict: verdict, classCorrection: correction } : m));
+    try {
+      await fetch("/api/classification-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          verdict, correction,
+          reply: msg.text,
+          classification: msg.classification || {},
+          ts: new Date().toISOString(),
+        }),
+      });
+    } catch (e) {
+      console.error("classification-feedback post failed", e);
+      commit(msgsRef.current.map(m => m.id === id ? { ...m, classVerdict: undefined, classCorrection: undefined } : m));
+    }
+  }, []);
+
+  return { msgs, typing, send, rate, rateClassification, setMsgs, endRef };
 }

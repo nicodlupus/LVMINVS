@@ -2,22 +2,119 @@ import { useRef, useState, type FormEvent } from "react";
 import type { Msg } from "../types";
 import { IconMic, IconSend, IconStar } from "./icons";
 
-export const Bubble = ({ m, onRate }: {
+export const Bubble = ({ m, onRate, onRateClass }: {
   m: Msg;
   onRate?: (rating: number, recommendation: string) => void;
-}) => (
-  <div className={`anim-up flex flex-col ${m.from === "me" ? "items-end" : "items-start"}`}>
-    <div className={`max-w-[80%] px-4 py-3 text-[14.5px] leading-relaxed
-      ${m.from === "me"
-        ? "bg-[var(--accent)] text-[var(--on-accent)] rounded-[20px] rounded-br-[6px]"
-        : "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)] rounded-[20px] rounded-bl-[6px]"}`}>
-      {m.text}
+  onRateClass?: (verdict: "correct" | "off", correction: string) => void;
+}) => {
+  const isReal = m.from === "bot" && m.text !== "…" && !m.text.startsWith("The companion is offline.");
+  const cls = m.classification;
+  const showCls = isReal && !!cls && onRateClass
+    && (cls.category || cls.emotion) && (cls.confidence ?? 0) > 0.3;
+
+  return (
+    <div className={`anim-up flex flex-col ${m.from === "me" ? "items-end" : "items-start"}`}>
+      <div className={`max-w-[80%] px-4 py-3 text-[14.5px] leading-relaxed
+        ${m.from === "me"
+          ? "bg-[var(--accent)] text-[var(--on-accent)] rounded-[20px] rounded-br-[6px]"
+          : "bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)] rounded-[20px] rounded-bl-[6px]"}`}>
+        {m.text}
+      </div>
+      {showCls && <ClassificationTag msg={m} onRate={onRateClass!} />}
+      {isReal && onRate && <Rating msg={m} onRate={onRate} />}
     </div>
-    {m.from === "bot" && onRate && m.text !== "…" && !m.text.startsWith("The companion is offline.") && (
-      <Rating msg={m} onRate={onRate} />
-    )}
-  </div>
-);
+  );
+};
+
+/* Shows the encoder's read of the user's discomfort ("safety · unease"),
+   with a quick Correct / Off verdict. Choosing "Off" opens a small text
+   field so the user can say what it actually was — precisely the signal
+   we need to improve the classifier. */
+function ClassificationTag({ msg, onRate }: {
+  msg: Msg;
+  onRate: (verdict: "correct" | "off", correction: string) => void;
+}) {
+  const cls = msg.classification!;
+  const [correcting, setCorrecting] = useState<boolean>(false);
+  const [note, setNote] = useState<string>(msg.classCorrection ?? "");
+  const done = !!msg.classVerdict;
+
+  const label = [cls.category, cls.emotion].filter(Boolean).join(" · ");
+  const pct = cls.confidence != null ? Math.round(cls.confidence * 100) : null;
+
+  if (done && !correcting) {
+    return (
+      <div className="mt-1.5 ml-1 max-w-[80%] flex items-center gap-2 text-[11.5px] text-[var(--muted)]">
+        <span>Read as</span>
+        <span className="text-[var(--text)]">{label}</span>
+        <span aria-hidden>·</span>
+        <span style={{ color: msg.classVerdict === "correct" ? "var(--accent)" : "var(--muted)" }}>
+          {msg.classVerdict === "correct" ? "you agreed" : `you corrected: ${msg.classCorrection || "off"}`}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1.5 ml-1 max-w-[80%] w-full rounded-2xl p-3 bg-[var(--surface)] border border-[var(--border)]">
+      <div className="flex items-center gap-2 text-[12px]">
+        <span className="text-[var(--muted)]">The companion read this as</span>
+        <span className="text-[var(--text)] font-medium">{label}</span>
+        {pct != null && (
+          <span className="ml-auto text-[10.5px] uppercase tracking-wider text-[var(--muted)]">
+            {pct}% match
+          </span>
+        )}
+      </div>
+
+      {!correcting ? (
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            onClick={() => onRate("correct", "")}
+            className="press flex-1 text-[12px] font-medium px-3 py-1.5 rounded-full
+                       bg-[var(--accent)] text-[var(--on-accent)]">
+            Correct
+          </button>
+          <button
+            type="button"
+            onClick={() => setCorrecting(true)}
+            className="press flex-1 text-[12px] font-medium px-3 py-1.5 rounded-full
+                       bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)]">
+            Off — I'd say…
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2 anim-up">
+          <input
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="what would you call it?"
+            autoFocus
+            className="w-full bg-transparent text-[12.5px] text-[var(--text)]
+                       placeholder:text-[var(--muted)] outline-none py-1
+                       border-b border-[var(--border)]"
+          />
+          <div className="flex items-center justify-between mt-2">
+            <button
+              type="button"
+              onClick={() => setCorrecting(false)}
+              className="press text-[11.5px] text-[var(--muted)] px-2 py-1">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => onRate("off", note.trim())}
+              className="press text-[12px] font-medium px-3 py-1.5 rounded-full
+                         bg-[var(--accent)] text-[var(--on-accent)]">
+              Send correction
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* Per-reply feedback: 1-5 stars + optional free-form recommendation.
    Once the user picks a star we surface a small note field; a Send button
