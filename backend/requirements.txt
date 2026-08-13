@@ -5,3 +5,4 @@ openai
 pypdf
 python-dotenv
 sentence-transformers
+cryptography
