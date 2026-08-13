@@ -50,4 +50,4 @@ export const buildContext = (thoughts: Thought[] = [], extra = ""): string => [
     `- "${t.thought}" | trigger: ${t.trigger} | emotion: ${t.emotion} | compulsion: ${t.compulsion}`),
 ].filter(Boolean).join("\n");
 
-export const OFFLINE = "The companion is offline. Start the backend: ./.venv/bin/python api_guide_test.py";
+export const OFFLINE = "The companion is offline. Start the backend: ./.venv/bin/uvicorn main:app --port 5055";
