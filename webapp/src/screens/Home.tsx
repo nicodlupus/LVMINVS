@@ -1,4 +1,4 @@
-import { USER } from "../data/mock";
+import { useUser } from "../data/user";
 import type { Chat } from "../hooks/useChat";
 import { Bubble, Typing } from "../ui/chat";
 import { IconChev, IconMap, IconMic, IconSpark, IconWave } from "../ui/icons";
@@ -12,13 +12,15 @@ const FEATURES = [
   { id: "exercise", title: "Trigger Exercise", desc: "Sit with it without acting" },
 ] as const;
 
-export function HomeScreen({ go, openMenu, chat }: ScreenProps & { chat: Chat }) {
+export function HomeScreen({ go, openMenu, thoughts, chat }: ScreenProps & { chat: Chat }) {
+  const user = useUser();
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Welcome back" : "Good evening";
+  const empty = (thoughts?.length ?? 0) === 0;
 
   return (
     <>
-      <Header title={`${greeting}, ${USER.name}.`} onMenu={openMenu} onAvatar={() => go("profile")} />
+      <Header title={`${greeting}, ${user.name}.`} onMenu={openMenu} onAvatar={() => go("profile")} />
 
       <div className="scroll flex-1 px-5 pb-2">
         <div className="stagger space-y-3 pt-2">
@@ -71,6 +73,16 @@ export function HomeScreen({ go, openMenu, chat }: ScreenProps & { chat: Chat })
               <IconSpark size={15} />
             </div>
             <span className="text-[14.5px]">How is it going?</span>
+          </div>
+        )}
+
+        {empty && chat.msgs.length === 0 && (
+          <div className="mt-6 p-4 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] anim-up">
+            <div className="text-[11.5px] uppercase tracking-wider text-[var(--muted)] mb-1.5">Your map is empty</div>
+            <p className="text-[13px] text-[var(--muted)] leading-relaxed">
+              Nothing is here yet by design. Say what's on your mind above, or tap <span className="text-[var(--text)] font-medium">Capture Now</span> to
+              record a thought — the map and the categories build themselves from what you write.
+            </p>
           </div>
         )}
       </div>

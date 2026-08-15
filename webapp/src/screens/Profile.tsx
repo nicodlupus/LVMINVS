@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { USER } from "../data/mock";
+import { useUser } from "../data/user";
 import { ACCENTS, useTheme } from "../theme/ThemeProvider";
 import type { MenuItem } from "../types";
 import { IconCheck, IconChev, IconClose, IconPen } from "../ui/icons";
@@ -19,19 +19,24 @@ export const MENU_ITEMS: MenuItem[] = [
 export function ProfileScreen({ openMenu, thoughts, memos, openSetting }: ScreenProps & {
   openSetting: (m: MenuItem) => void;
 }) {
+  const user = useUser();
   const stats: [string, number][] = [
     ["Thoughts", thoughts.length],
     ["Memos", memos.length],
-    ["Exercises", 6],
+    ["Exercises", 0],
   ];
   return (
     <>
       <Header title="Profile" onMenu={openMenu} onAvatar={() => {}} />
       <div className="scroll flex-1 px-5 pb-6">
         <div className="flex flex-col items-center pt-4 pb-7">
-          <img src={USER.avatar} className="w-24 h-24 rounded-full object-cover border-2 border-[var(--border)]" alt="" />
-          <div className="text-[20px] font-medium text-[var(--text)] mt-3.5">{USER.fullName}</div>
-          <div className="text-[13px] text-[var(--muted)] mt-0.5">Here since {USER.since}</div>
+          <div className="w-24 h-24 rounded-full border-2 border-[var(--border)] grid place-items-center"
+               style={{ background: `hsl(${user.hue} 55% 55%)`, color: "white",
+                        fontSize: 34, fontWeight: 600 }}>
+            {user.initials}
+          </div>
+          <div className="text-[20px] font-medium text-[var(--text)] mt-3.5">{user.fullName}</div>
+          <div className="text-[13px] text-[var(--muted)] mt-0.5">Here since {user.since}</div>
         </div>
 
         <Card className="p-4 flex">
@@ -105,16 +110,21 @@ export function AppearanceControls() {
 export function SideMenu({ open, onClose, go, openSetting }: {
   open: boolean; onClose: () => void; go: Go; openSetting: (m: MenuItem) => void;
 }) {
+  const user = useUser();
   if (!open) return null;
   return (
     <div className="absolute inset-0 z-50 anim-in">
       <div className="absolute inset-0 bg-black/35" onClick={onClose} />
       <div className="anim-drawer absolute inset-y-0 left-0 w-[78%] max-w-[340px] bg-[var(--surface)] border-r border-[var(--border)] flex flex-col">
         <div className="p-5 pt-8 flex items-center gap-3.5 border-b border-[var(--border)]">
-          <img src={USER.avatar} className="w-12 h-12 rounded-full object-cover" alt="" />
+          <div className="w-12 h-12 rounded-full grid place-items-center shrink-0"
+               style={{ background: `hsl(${user.hue} 55% 55%)`, color: "white",
+                        fontSize: 17, fontWeight: 600 }}>
+            {user.initials}
+          </div>
           <div className="min-w-0">
-            <div className="text-[15.5px] font-medium text-[var(--text)] truncate">{USER.fullName}</div>
-            <div className="text-[12.5px] text-[var(--muted)]">{USER.handle}</div>
+            <div className="text-[15.5px] font-medium text-[var(--text)] truncate">{user.fullName}</div>
+            <div className="text-[12.5px] text-[var(--muted)]">{user.handle}</div>
           </div>
           <button onClick={onClose} className="press ml-auto text-[var(--muted)] p-1"><IconClose size={20} /></button>
         </div>
@@ -141,12 +151,13 @@ export function SettingSheet({ item, onClose, toast, onLogout }: {
   item: MenuItem | null; onClose: () => void; toast: (m: string) => void;
   onLogout?: () => void;
 }) {
+  const user = useUser();
   if (!item) return null;
 
   const bodies: Record<string, JSX.Element> = {
     account: (
       <div className="space-y-3">
-        {[["Name", USER.fullName], ["Email", "nico@example.com"], ["Password", "••••••••"], ["Language", "English (UK)"]]
+        {[["Display name", user.fullName], ["Username", user.username], ["Password", "••••••••"], ["Language", "English (UK)"]]
           .map(([k, v]) => (
           <div key={k} className="flex items-center justify-between p-4 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)]">
             <div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { login, proposeUsername, signup, type Session, type Vault } from "../api/auth";
 import { APP } from "../data/mock";
+import { prettyFromUsername } from "../data/user";
 import { Button, Card } from "../ui/primitives";
 
 /* Onboarding — seeds the personalization profile inside the encrypted vault */
@@ -16,6 +17,7 @@ export function AuthScreen({ onAuthed }: {
 }) {
   const [tab, setTab] = useState<"create" | "login">("create");
   const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -33,8 +35,15 @@ export function AuthScreen({ onAuthed }: {
   const submit = async () => {
     setBusy(true); setError("");
     try {
+      const profile = tab === "create"
+        ? {
+            ...answers,
+            displayName: displayName.trim() || prettyFromUsername(username),
+            createdAt: new Date().toISOString(),
+          }
+        : {};
       const r = tab === "create"
-        ? await signup(username, password, answers)
+        ? await signup(username, password, profile)
         : await login(username, password);
       onAuthed(r.session, r.vault);
     } catch (e) {
@@ -68,12 +77,19 @@ export function AuthScreen({ onAuthed }: {
       {step === 0 && (
         <Card className="p-5 space-y-4 anim-up">
           {tab === "create" ? (
-            <div>
-              <div className="text-[12px] text-[var(--muted)] mb-1.5">Your username (random on purpose — change it later if you want)</div>
-              <div className="mono text-[16px] text-[var(--accent)] p-3 rounded-xl bg-[var(--soft)] border border-[var(--border)]">
-                {username || "…"}
+            <>
+              <div>
+                <div className="text-[12px] text-[var(--muted)] mb-1.5">Your username (random on purpose — change it later if you want)</div>
+                <div className="mono text-[16px] text-[var(--accent)] p-3 rounded-xl bg-[var(--soft)] border border-[var(--border)]">
+                  {username || "…"}
+                </div>
               </div>
-            </div>
+              <div>
+                <div className="text-[12px] text-[var(--muted)] mb-1.5">What should the app call you? (optional)</div>
+                <input className={input} placeholder={username ? prettyFromUsername(username) : "your name"}
+                       value={displayName} onChange={e => setDisplayName(e.target.value)} maxLength={40} />
+              </div>
+            </>
           ) : (
             <input className={input} placeholder="Username" value={username}
                    onChange={e => setUsername(e.target.value.trim())} autoFocus />

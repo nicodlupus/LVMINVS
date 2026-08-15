@@ -4,13 +4,6 @@ import type { Category, Connection, Memo, NodeKind, Strength, Thought } from "..
    MOCK DATA  — everything a backend would eventually serve
    ═══════════════════════════════════════════════════════════════════════ */
 
-export const USER = {
-  name: "Nico",
-  fullName: "Nico Di Legardia",
-  handle: "@nico",
-  since: "March 2026",
-  avatar: "https://i.pravatar.cc/160?img=68",
-};
 export const APP = "LVMINVS";
 
 /* ── Shared nodes ──────────────────────────────────────────────────────
