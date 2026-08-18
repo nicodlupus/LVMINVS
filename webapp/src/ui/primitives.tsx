@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
-import { USER } from "../data/mock";
+import { useUser } from "../data/user";
 import { IconBack, IconCheck, IconClose, IconMenu } from "./icons";
 
 export const Card = ({ className = "", children, ...p }: HTMLAttributes<HTMLDivElement>) => (
@@ -27,12 +27,23 @@ export const Chip = ({ active, className = "", children, ...p }: ChipProps) => (
              : "bg-[var(--surface)] text-[var(--muted)] border-[var(--border)]"} ${className}`}>{children}</button>
 );
 
-export const Avatar = ({ size = 36, onClick }: { size?: number; onClick?: () => void }) => (
-  <button onClick={onClick} className="press rounded-full overflow-hidden border border-[var(--border)] shrink-0"
-          style={{ width: size, height: size }}>
-    <img src={USER.avatar} alt="" className="w-full h-full object-cover" />
-  </button>
-);
+/* Deterministic initials-on-color avatar. No external images ever — the
+   colour is derived from the username hash so the same account paints
+   the same disk on every device. */
+export const Avatar = ({ size = 36, onClick }: { size?: number; onClick?: () => void }) => {
+  const u = useUser();
+  const fontPx = Math.round(size * 0.42);
+  return (
+    <button onClick={onClick}
+            aria-label={u.fullName}
+            className="press rounded-full overflow-hidden border border-[var(--border)] shrink-0 grid place-items-center"
+            style={{ width: size, height: size,
+                     background: `hsl(${u.hue} 55% 55%)`,
+                     color: "white", fontWeight: 600, fontSize: fontPx, lineHeight: 1 }}>
+      {u.initials}
+    </button>
+  );
+};
 
 /* Bottom sheet + full-screen modal */
 export function Sheet({ open, onClose, children, title, full }: {

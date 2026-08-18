@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { clearSession, loadSession, saveSession, uploadVault,
          type Session, type Vault } from "./api/auth";
 import { AI_SINK, askCompanion, buildContext } from "./api/companion";
-import { CATEGORIES, CONNECTIONS, MEMOS, STRENGTH, THOUGHTS } from "./data/mock";
+import { STRENGTH } from "./data/mock";
+import { UserContext, userFrom } from "./data/user";
 import { useChat } from "./hooks/useChat";
 import { BottomNav } from "./ui/BottomNav";
 import { Composer } from "./ui/chat";
@@ -23,23 +24,23 @@ export default function App() {
   const [menu, setMenu] = useState(false);
   const [setting, setSetting] = useState<MenuItem | null>(null);
   const [toastMsg, setToastMsg] = useState("");
-  const [thoughts, setThoughts] = useState<Thought[]>(THOUGHTS);
-  const [memos, setMemos] = useState<Memo[]>(MEMOS);
-  const [cats, setCats] = useState<Category[]>(CATEGORIES);
-  const [connections, setConnections] = useState<Connection[]>(CONNECTIONS);
+  const [thoughts, setThoughts] = useState<Thought[]>([]);
+  const [memos, setMemos] = useState<Memo[]>([]);
+  const [cats, setCats] = useState<Category[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [exercisePreset, setExercisePreset] = useState<Thought | null>(null);
   const [reflectPreset, setReflectPreset] = useState<Thought | null>(null);
 
   /* ── zero-knowledge account: gate, hydrate, sync ─────────────────── */
   const [session, setSession] = useState<Session | null>(loadSession);
   const [hydrated, setHydrated] = useState(false);
-  const profileRef = useRef<Record<string, string>>({});
+  const [profile, setProfile] = useState<Record<string, string>>({});
 
   const hydrate = (s: Session, v: Vault) => {
-    profileRef.current = v.profile || {};
+    setProfile(v.profile || {});
     setThoughts(v.thoughts || []);
     setMemos(v.memos || []);
-    setCats(v.cats?.length ? v.cats : CATEGORIES);
+    setCats(v.cats || []);
     setConnections(v.connections || []);
     setSession(s); saveSession(s); setHydrated(true);
   };
@@ -63,11 +64,11 @@ export default function App() {
   useEffect(() => {
     if (!session || !hydrated) return;
     const t = setTimeout(() => {
-      uploadVault(session, { version: 1, profile: profileRef.current,
+      uploadVault(session, { version: 1, profile,
         thoughts, memos, cats, connections }).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
-  }, [thoughts, memos, cats, connections, session, hydrated]);
+  }, [thoughts, memos, cats, connections, profile, session, hydrated]);
 
   const logout = () => { clearSession(); location.reload(); };
 
@@ -176,30 +177,34 @@ export default function App() {
     );
   }
 
+  const user = userFrom(session, profile);
+
   return (
-    <div className="shell">
-      <div className="frame">
-        <div className="flex flex-col flex-1 min-h-0 relative"
-             style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }}>
-          {screen === "home"     && <HomeScreen {...shared} chat={homeChat} />}
-          {screen === "chat"     && <ChatScreen go={go} chat={homeChat} onSend={sendToCompanion} />}
-          {screen === "capture"  && <CaptureScreen {...shared} onSaveMemo={saveMemo} onSaveThought={saveThought} />}
-          {screen === "map"      && <MapScreen {...shared} onUpdate={upsertThought}
-                                       cats={cats} setCats={setCats} connections={connections} setConnections={setConnections} />}
-          {screen === "reflect"  && <ReflectScreen {...shared} preset={reflectPreset} />}
-          {screen === "exercise" && <ExerciseScreen {...shared} preset={exercisePreset} />}
-          {screen === "profile"  && <ProfileScreen {...shared} openSetting={setSetting} />}
+    <UserContext.Provider value={user}>
+      <div className="shell">
+        <div className="frame">
+          <div className="flex flex-col flex-1 min-h-0 relative"
+               style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }}>
+            {screen === "home"     && <HomeScreen {...shared} chat={homeChat} />}
+            {screen === "chat"     && <ChatScreen go={go} chat={homeChat} onSend={sendToCompanion} />}
+            {screen === "capture"  && <CaptureScreen {...shared} onSaveMemo={saveMemo} onSaveThought={saveThought} />}
+            {screen === "map"      && <MapScreen {...shared} onUpdate={upsertThought}
+                                         cats={cats} setCats={setCats} connections={connections} setConnections={setConnections} />}
+            {screen === "reflect"  && <ReflectScreen {...shared} preset={reflectPreset} />}
+            {screen === "exercise" && <ExerciseScreen {...shared} preset={exercisePreset} />}
+            {screen === "profile"  && <ProfileScreen {...shared} openSetting={setSetting} />}
 
-          {/* the home composer lives outside the scroll area */}
-          {screen === "home" && <Composer placeholder="Type" onSend={sendToCompanion} />}
+            {/* the home composer lives outside the scroll area */}
+            {screen === "home" && <Composer placeholder="Type" onSend={sendToCompanion} />}
 
-          <SideMenu open={menu} onClose={() => setMenu(false)} go={go} openSetting={setSetting} />
-          <SettingSheet item={setting} onClose={() => setSetting(null)} toast={toast} onLogout={logout} />
-          <Toast msg={toastMsg} />
+            <SideMenu open={menu} onClose={() => setMenu(false)} go={go} openSetting={setSetting} />
+            <SettingSheet item={setting} onClose={() => setSetting(null)} toast={toast} onLogout={logout} />
+            <Toast msg={toastMsg} />
+          </div>
+
+          <BottomNav screen={screen} go={go} />
         </div>
-
-        <BottomNav screen={screen} go={go} />
       </div>
-    </div>
+    </UserContext.Provider>
   );
 }

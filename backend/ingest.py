@@ -10,27 +10,35 @@ Sources
 Output: backend/cache/corpus.json + embeddings.npy
 Run once (and re-run whenever a source changes):
   ./.venv/bin/python ingest.py
+
+Vectors come from OpenAI's text-embedding-3-small — matches pipeline.py so
+the same vector space is used at ingest and at query time. Needs
+OPENAI_API_KEY set at build time.
 """
 from __future__ import annotations
 
 import csv
 import json
+import os
 import pathlib
 
 import numpy as np
+from dotenv import load_dotenv
+from openai import OpenAI
 from pypdf import PdfReader
-from sentence_transformers import SentenceTransformer
 
 HERE = pathlib.Path(__file__).parent
+load_dotenv(HERE / ".env")
 ROOT = HERE.parent
 CACHE = HERE / "cache"
 CSV_PATH = ROOT / "ocd_prototype_app_example" / "test_data.csv"
 PDF_PATHS = [ROOT / "ocd_1stp.pdf", ROOT / "OCD_Support_Tool_Concept.pdf"]
 
-MODEL_NAME = "all-MiniLM-L6-v2"
+EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 
 CHUNK_CHARS = 700
 OVERLAP = 120
+BATCH = 96
 
 
 def load_ontology_rows() -> list[dict]:
@@ -80,14 +88,27 @@ def load_manual_chunks() -> list[dict]:
     return docs
 
 
+def embed_all(client: OpenAI, texts: list[str]) -> np.ndarray:
+    """Batched — OpenAI accepts up to 2048 inputs per call, we stay well
+    under that. L2-normalise so dot product == cosine similarity."""
+    out: list[list[float]] = []
+    for i in range(0, len(texts), BATCH):
+        batch = texts[i:i + BATCH]
+        resp = client.embeddings.create(model=EMBED_MODEL, input=batch)
+        out.extend([d.embedding for d in resp.data])
+        print(f"  embedded {min(i + BATCH, len(texts))}/{len(texts)}")
+    v = np.array(out, dtype=np.float32)
+    norms = np.linalg.norm(v, axis=1, keepdims=True)
+    return v / np.maximum(norms, 1e-12)
+
+
 def main() -> None:
     CACHE.mkdir(exist_ok=True)
     corpus = load_ontology_rows() + load_manual_chunks()
-    print(f"embedding {len(corpus)} documents with {MODEL_NAME} …")
-    model = SentenceTransformer(MODEL_NAME)
-    emb = model.encode([d["text"] for d in corpus], normalize_embeddings=True,
-                       show_progress_bar=True)
-    np.save(CACHE / "embeddings.npy", emb.astype(np.float32))
+    print(f"embedding {len(corpus)} documents with {EMBED_MODEL} …")
+    client = OpenAI()
+    emb = embed_all(client, [d["text"] for d in corpus])
+    np.save(CACHE / "embeddings.npy", emb)
     (CACHE / "corpus.json").write_text(json.dumps(corpus, ensure_ascii=False, indent=1))
     print(f"done → {CACHE}/corpus.json ({len(corpus)} docs), embeddings {emb.shape}")
 

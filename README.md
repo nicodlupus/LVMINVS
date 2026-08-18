@@ -31,7 +31,7 @@ Two ideas carry the project:
                                                       │  /api
                          ┌────────────────────────────▼───────────────── backend (FastAPI) ─┐
                          │                                                                  │
-   [1] ENCODER      sentence-transformers kNN over the clinician CSV ontology                │
+   [1] ENCODER      OpenAI-embeddings kNN over the clinician CSV ontology                    │
                     → category · emotion · distortion · compulsion type · confidence         │
                                                       │                                     │
    [2] RETRIEVER    embedded chunks of the OCD manuals (PDF) → the only passages             │
