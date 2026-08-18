@@ -31,11 +31,21 @@ export function ProfileScreen({ openMenu, thoughts, memos, openSetting }: Screen
       <div className="scroll flex-1 px-5 pb-6">
         <div className="flex flex-col items-center pt-4 pb-7">
           <div className="w-24 h-24 rounded-full border-2 border-[var(--border)] grid place-items-center"
-               style={{ background: `hsl(${user.hue} 55% 55%)`, color: "white",
-                        fontSize: 34, fontWeight: 600 }}>
+               style={user.hasAvatar
+                 ? { background: `hsl(${user.hue} 55% 55%)`, color: "white",
+                     fontSize: 34, fontWeight: 600 }
+                 : { background: "var(--surface-2)", color: "var(--muted)",
+                     fontSize: 34, fontWeight: 500 }}>
             {user.initials}
           </div>
-          <div className="text-[20px] font-medium text-[var(--text)] mt-3.5">{user.fullName}</div>
+          {user.hasName ? (
+            <div className="text-[20px] font-medium text-[var(--text)] mt-3.5">{user.fullName}</div>
+          ) : (
+            <button onClick={() => openSetting({ id: "account", label: "Account settings" })}
+                    className="press text-[15px] text-[var(--muted)] mt-3.5 underline decoration-dotted underline-offset-4">
+              Add a display name
+            </button>
+          )}
           <div className="text-[13px] text-[var(--muted)] mt-0.5">Here since {user.since}</div>
         </div>
 
@@ -118,13 +128,20 @@ export function SideMenu({ open, onClose, go, openSetting }: {
       <div className="anim-drawer absolute inset-y-0 left-0 w-[78%] max-w-[340px] bg-[var(--surface)] border-r border-[var(--border)] flex flex-col">
         <div className="p-5 pt-8 flex items-center gap-3.5 border-b border-[var(--border)]">
           <div className="w-12 h-12 rounded-full grid place-items-center shrink-0"
-               style={{ background: `hsl(${user.hue} 55% 55%)`, color: "white",
-                        fontSize: 17, fontWeight: 600 }}>
+               style={user.hasAvatar
+                 ? { background: `hsl(${user.hue} 55% 55%)`, color: "white",
+                     fontSize: 17, fontWeight: 600 }
+                 : { background: "var(--surface-2)", color: "var(--muted)",
+                     fontSize: 17, fontWeight: 500 }}>
             {user.initials}
           </div>
           <div className="min-w-0">
-            <div className="text-[15.5px] font-medium text-[var(--text)] truncate">{user.fullName}</div>
-            <div className="text-[12.5px] text-[var(--muted)]">{user.handle}</div>
+            <div className="text-[15.5px] font-medium text-[var(--text)] truncate">
+              {user.hasName ? user.fullName : user.handle}
+            </div>
+            {user.hasName && (
+              <div className="text-[12.5px] text-[var(--muted)]">{user.handle}</div>
+            )}
           </div>
           <button onClick={onClose} className="press ml-auto text-[var(--muted)] p-1"><IconClose size={20} /></button>
         </div>

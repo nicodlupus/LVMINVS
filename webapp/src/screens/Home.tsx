@@ -20,7 +20,8 @@ export function HomeScreen({ go, openMenu, thoughts, chat }: ScreenProps & { cha
 
   return (
     <>
-      <Header title={`${greeting}, ${user.name}.`} onMenu={openMenu} onAvatar={() => go("profile")} />
+      <Header title={user.hasName ? `${greeting}, ${user.name}.` : `${greeting}.`}
+              onMenu={openMenu} onAvatar={() => go("profile")} />
 
       <div className="scroll flex-1 px-5 pb-2">
         <div className="stagger space-y-3 pt-2">

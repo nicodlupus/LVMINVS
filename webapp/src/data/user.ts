@@ -3,19 +3,25 @@ import type { Session } from "../api/auth";
 
 /* Everything the UI needs to render an identity. Derived from the session
    (username, never traceable) and the profile the user filled out during
-   signup (kept inside the encrypted vault). No external image ever. */
+   signup (kept inside the encrypted vault).
+
+   A brand-new account has NO display name and NO avatar. Nothing is
+   auto-generated from the username — the identity fields stay empty until
+   the person chooses to fill them in themselves. */
 export interface UserDisplay {
   username: string;
-  name: string;      // short display, used in greetings
-  fullName: string;  // longer display, used in Profile
+  name: string;      // short display; "" when the user hasn't set one
+  fullName: string;  // long display; "" when the user hasn't set one
   handle: string;    // "@username"
   since: string;     // pretty "Month Year"
-  initials: string;
-  hue: number;       // 0..360, deterministic from the username
+  initials: string;  // "" when there is no display name
+  hue: number | null;// null when there is no display name
+  hasName: boolean;
+  hasAvatar: boolean;
 }
 
-/* deterministic hash → 0..360, so every username paints the same avatar
-   on every device without an image ever leaving the browser */
+/* deterministic hash → 0..360, only used once the user has actually set a
+   display name they want. Never derived from the username alone. */
 export function hashHue(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -28,13 +34,14 @@ export function hashHue(s: string): number {
 /* first letter of each of the first two words, uppercased */
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/[\s\-_]+/).filter(Boolean);
-  if (parts.length === 0) return "·";
+  if (parts.length === 0) return "";
   const a = parts[0][0] || "";
   const b = parts.length > 1 ? parts[1][0] : (parts[0][1] || "");
   return (a + b).toUpperCase().slice(0, 2);
 }
 
-/* a random-username like "amber-heron-42" reads fine as "Amber Heron" */
+/* Kept for the Auth screen's placeholder text only — never used as a fallback
+   value for the actual profile. A blank display name stays blank. */
 export function prettyFromUsername(u: string): string {
   return u.split(/[-_]/).filter(w => !/^\d+$/.test(w))
           .map(w => w ? w[0].toUpperCase() + w.slice(1) : "")
@@ -43,17 +50,20 @@ export function prettyFromUsername(u: string): string {
 
 export function userFrom(session: Session, profile: Record<string, string>): UserDisplay {
   const username = session.username;
-  const display  = (profile.displayName || "").trim() || prettyFromUsername(username);
+  const display  = (profile.displayName || "").trim();
   const since    = new Date(profile.createdAt || Date.now())
                      .toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const hasName  = display.length > 0;
   return {
     username,
-    name: display.split(/\s+/)[0],
+    name: hasName ? display.split(/\s+/)[0] : "",
     fullName: display,
     handle: "@" + username,
     since,
-    initials: initialsOf(display),
-    hue: hashHue(username),
+    initials: hasName ? initialsOf(display) : "",
+    hue: hasName ? hashHue(display) : null,
+    hasName,
+    hasAvatar: hasName,
   };
 }
 

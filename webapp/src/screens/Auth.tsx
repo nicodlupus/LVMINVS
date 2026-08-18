@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { login, proposeUsername, signup, type Session, type Vault } from "../api/auth";
 import { APP } from "../data/mock";
-import { prettyFromUsername } from "../data/user";
 import { Button, Card } from "../ui/primitives";
 
 /* Onboarding — seeds the personalization profile inside the encrypted vault */
@@ -38,7 +37,8 @@ export function AuthScreen({ onAuthed }: {
       const profile = tab === "create"
         ? {
             ...answers,
-            displayName: displayName.trim() || prettyFromUsername(username),
+            /* empty stays empty — no auto-generated name from the username */
+            displayName: displayName.trim(),
             createdAt: new Date().toISOString(),
           }
         : {};
@@ -85,8 +85,8 @@ export function AuthScreen({ onAuthed }: {
                 </div>
               </div>
               <div>
-                <div className="text-[12px] text-[var(--muted)] mb-1.5">What should the app call you? (optional)</div>
-                <input className={input} placeholder={username ? prettyFromUsername(username) : "your name"}
+                <div className="text-[12px] text-[var(--muted)] mb-1.5">What should the app call you? (optional — leave blank to stay anonymous)</div>
+                <input className={input} placeholder="leave blank if you prefer"
                        value={displayName} onChange={e => setDisplayName(e.target.value)} maxLength={40} />
               </div>
             </>

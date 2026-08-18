@@ -27,19 +27,22 @@ export const Chip = ({ active, className = "", children, ...p }: ChipProps) => (
              : "bg-[var(--surface)] text-[var(--muted)] border-[var(--border)]"} ${className}`}>{children}</button>
 );
 
-/* Deterministic initials-on-color avatar. No external images ever — the
-   colour is derived from the username hash so the same account paints
-   the same disk on every device. */
+/* Avatar. A brand-new account has NO picture — a neutral placeholder disk
+   is rendered until the person actually sets a display name themselves.
+   Once they do, initials-on-color painted from that name they chose. */
 export const Avatar = ({ size = 36, onClick }: { size?: number; onClick?: () => void }) => {
   const u = useUser();
   const fontPx = Math.round(size * 0.42);
+  const style = u.hasAvatar
+    ? { width: size, height: size, background: `hsl(${u.hue} 55% 55%)`,
+        color: "white", fontWeight: 600, fontSize: fontPx, lineHeight: 1 }
+    : { width: size, height: size, background: "var(--surface-2)",
+        color: "var(--muted)", fontWeight: 500, fontSize: fontPx, lineHeight: 1 };
   return (
     <button onClick={onClick}
-            aria-label={u.fullName}
+            aria-label={u.fullName || u.username}
             className="press rounded-full overflow-hidden border border-[var(--border)] shrink-0 grid place-items-center"
-            style={{ width: size, height: size,
-                     background: `hsl(${u.hue} 55% 55%)`,
-                     color: "white", fontWeight: 600, fontSize: fontPx, lineHeight: 1 }}>
+            style={style}>
       {u.initials}
     </button>
   );
