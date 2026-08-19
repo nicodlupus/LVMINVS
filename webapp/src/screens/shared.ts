@@ -9,4 +9,5 @@ export interface ScreenProps {
   thoughts: Thought[];
   memos: Memo[];
   toast: (m: string) => void;
+  updateProfile: (patch: Record<string, string>) => void;
 }

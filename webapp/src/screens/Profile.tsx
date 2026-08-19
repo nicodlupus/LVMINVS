@@ -1,10 +1,37 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useUser } from "../data/user";
 import { ACCENTS, useTheme } from "../theme/ThemeProvider";
 import type { MenuItem } from "../types";
 import { IconCheck, IconChev, IconClose, IconPen } from "../ui/icons";
 import { Button, Card, Header, SectionLabel, Sheet } from "../ui/primitives";
 import type { Go, ScreenProps } from "./shared";
+
+/* Center-crop to square + downscale to 256 px + JPEG at 0.85 quality.
+   Result is a data: URL small enough (~15 KB) to sit inside the vault
+   blob without inflating every save. Runs entirely on the device. */
+async function fileToAvatarDataUrl(file: File, size = 256): Promise<string> {
+  if (!file.type.startsWith("image/")) throw new Error("not an image");
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error("could not load the image"));
+      im.src = url;
+    });
+    const d = Math.min(img.width, img.height);
+    const sx = (img.width - d) / 2;
+    const sy = (img.height - d) / 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no 2d canvas context");
+    ctx.drawImage(img, sx, sy, d, d, 0, 0, size, size);
+    return canvas.toDataURL("image/jpeg", 0.85);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 export const MENU_ITEMS: MenuItem[] = [
   { id: "account",    label: "Account settings" },
@@ -16,10 +43,31 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "logout",     label: "Log out", danger: true },
 ];
 
-export function ProfileScreen({ openMenu, thoughts, memos, openSetting }: ScreenProps & {
+export function ProfileScreen({ openMenu, thoughts, memos, openSetting, updateProfile, toast }: ScreenProps & {
   openSetting: (m: MenuItem) => void;
 }) {
   const user = useUser();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const pickPhoto = () => fileRef.current?.click();
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";                       // reset so re-picking same file works
+    if (!f) return;
+    setUploading(true);
+    try {
+      const dataUrl = await fileToAvatarDataUrl(f);
+      updateProfile({ photo: dataUrl });
+      toast("Photo saved");
+    } catch (err) {
+      toast("Could not read that image");
+    } finally {
+      setUploading(false);
+    }
+  };
+  const removePhoto = () => { updateProfile({ photo: "" }); toast("Photo removed"); };
+
   const stats: [string, number][] = [
     ["Thoughts", thoughts.length],
     ["Memos", memos.length],
@@ -30,14 +78,34 @@ export function ProfileScreen({ openMenu, thoughts, memos, openSetting }: Screen
       <Header title="Profile" onMenu={openMenu} onAvatar={() => {}} />
       <div className="scroll flex-1 px-5 pb-6">
         <div className="flex flex-col items-center pt-4 pb-7">
-          <div className="w-24 h-24 rounded-full border-2 border-[var(--border)] grid place-items-center"
-               style={user.hasAvatar
-                 ? { background: `hsl(${user.hue} 55% 55%)`, color: "white",
-                     fontSize: 34, fontWeight: 600 }
-                 : { background: "var(--surface-2)", color: "var(--muted)",
-                     fontSize: 34, fontWeight: 500 }}>
-            {user.initials}
+          <button onClick={pickPhoto}
+                  className="press w-24 h-24 rounded-full border-2 border-[var(--border)] overflow-hidden grid place-items-center"
+                  style={user.hasPhoto
+                    ? { padding: 0 }
+                    : user.hasName
+                      ? { background: `hsl(${user.hue} 55% 55%)`, color: "white",
+                          fontSize: 34, fontWeight: 600 }
+                      : { background: "var(--surface-2)", color: "var(--muted)",
+                          fontSize: 34, fontWeight: 500 }}>
+            {user.hasPhoto
+              ? <img src={user.photo} alt="" className="w-full h-full object-cover" />
+              : user.initials || <IconPen size={22} />}
+          </button>
+          <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
+
+          <div className="flex gap-3 mt-3">
+            <button onClick={pickPhoto} disabled={uploading}
+                    className="press text-[12.5px] text-[var(--accent)]">
+              {uploading ? "Saving…" : user.hasPhoto ? "Change photo" : "Upload a photo"}
+            </button>
+            {user.hasPhoto && (
+              <button onClick={removePhoto}
+                      className="press text-[12.5px] text-[var(--muted)]">
+                Remove
+              </button>
+            )}
           </div>
+
           {user.hasName ? (
             <div className="text-[20px] font-medium text-[var(--text)] mt-3.5">{user.fullName}</div>
           ) : (
@@ -127,13 +195,17 @@ export function SideMenu({ open, onClose, go, openSetting }: {
       <div className="absolute inset-0 bg-black/35" onClick={onClose} />
       <div className="anim-drawer absolute inset-y-0 left-0 w-[78%] max-w-[340px] bg-[var(--surface)] border-r border-[var(--border)] flex flex-col">
         <div className="p-5 pt-8 flex items-center gap-3.5 border-b border-[var(--border)]">
-          <div className="w-12 h-12 rounded-full grid place-items-center shrink-0"
-               style={user.hasAvatar
-                 ? { background: `hsl(${user.hue} 55% 55%)`, color: "white",
-                     fontSize: 17, fontWeight: 600 }
-                 : { background: "var(--surface-2)", color: "var(--muted)",
-                     fontSize: 17, fontWeight: 500 }}>
-            {user.initials}
+          <div className="w-12 h-12 rounded-full grid place-items-center shrink-0 overflow-hidden"
+               style={user.hasPhoto
+                 ? { padding: 0 }
+                 : user.hasName
+                   ? { background: `hsl(${user.hue} 55% 55%)`, color: "white",
+                       fontSize: 17, fontWeight: 600 }
+                   : { background: "var(--surface-2)", color: "var(--muted)",
+                       fontSize: 17, fontWeight: 500 }}>
+            {user.hasPhoto
+              ? <img src={user.photo} alt="" className="w-full h-full object-cover" />
+              : user.initials}
           </div>
           <div className="min-w-0">
             <div className="text-[15.5px] font-medium text-[var(--text)] truncate">

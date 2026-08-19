@@ -165,7 +165,10 @@ export default function App() {
       .catch(() => {});
   };
 
-  const shared = { go, openMenu: () => setMenu(true), thoughts, memos, toast };
+  const updateProfile = (patch: Record<string, string>) =>
+    setProfile(p => ({ ...p, ...patch }));
+
+  const shared = { go, openMenu: () => setMenu(true), thoughts, memos, toast, updateProfile };
 
   if (!session) {
     return (

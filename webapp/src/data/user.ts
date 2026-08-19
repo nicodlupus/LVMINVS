@@ -16,8 +16,10 @@ export interface UserDisplay {
   since: string;     // pretty "Month Year"
   initials: string;  // "" when there is no display name
   hue: number | null;// null when there is no display name
+  photo: string;     // data: URL of an uploaded photo; "" when there is none
   hasName: boolean;
-  hasAvatar: boolean;
+  hasPhoto: boolean;
+  hasAvatar: boolean;  // any visual — photo OR initials
 }
 
 /* deterministic hash → 0..360, only used once the user has actually set a
@@ -51,9 +53,11 @@ export function prettyFromUsername(u: string): string {
 export function userFrom(session: Session, profile: Record<string, string>): UserDisplay {
   const username = session.username;
   const display  = (profile.displayName || "").trim();
+  const photo    = (profile.photo || "").trim();
   const since    = new Date(profile.createdAt || Date.now())
                      .toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   const hasName  = display.length > 0;
+  const hasPhoto = photo.startsWith("data:image/");
   return {
     username,
     name: hasName ? display.split(/\s+/)[0] : "",
@@ -62,8 +66,10 @@ export function userFrom(session: Session, profile: Record<string, string>): Use
     since,
     initials: hasName ? initialsOf(display) : "",
     hue: hasName ? hashHue(display) : null,
+    photo: hasPhoto ? photo : "",
     hasName,
-    hasAvatar: hasName,
+    hasPhoto,
+    hasAvatar: hasName || hasPhoto,
   };
 }
 

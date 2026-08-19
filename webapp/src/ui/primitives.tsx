@@ -27,22 +27,31 @@ export const Chip = ({ active, className = "", children, ...p }: ChipProps) => (
              : "bg-[var(--surface)] text-[var(--muted)] border-[var(--border)]"} ${className}`}>{children}</button>
 );
 
-/* Avatar. A brand-new account has NO picture — a neutral placeholder disk
-   is rendered until the person actually sets a display name themselves.
-   Once they do, initials-on-color painted from that name they chose. */
+/* Avatar. Precedence:
+     1. an uploaded photo the person chose themselves (renders as <img>)
+     2. initials-on-color painted from their chosen display name
+     3. a neutral placeholder disk — nothing derived from the username */
 export const Avatar = ({ size = 36, onClick }: { size?: number; onClick?: () => void }) => {
   const u = useUser();
   const fontPx = Math.round(size * 0.42);
-  const style = u.hasAvatar
-    ? { width: size, height: size, background: `hsl(${u.hue} 55% 55%)`,
-        color: "white", fontWeight: 600, fontSize: fontPx, lineHeight: 1 }
-    : { width: size, height: size, background: "var(--surface-2)",
-        color: "var(--muted)", fontWeight: 500, fontSize: fontPx, lineHeight: 1 };
+  const base = "press rounded-full overflow-hidden border border-[var(--border)] shrink-0 grid place-items-center";
+  const dim = { width: size, height: size };
+  if (u.hasPhoto) {
+    return (
+      <button onClick={onClick} aria-label={u.fullName || u.username}
+              className={base} style={dim}>
+        <img src={u.photo} alt="" className="w-full h-full object-cover" />
+      </button>
+    );
+  }
+  const style = u.hasName
+    ? { ...dim, background: `hsl(${u.hue} 55% 55%)`, color: "white",
+        fontWeight: 600, fontSize: fontPx, lineHeight: 1 }
+    : { ...dim, background: "var(--surface-2)", color: "var(--muted)",
+        fontWeight: 500, fontSize: fontPx, lineHeight: 1 };
   return (
-    <button onClick={onClick}
-            aria-label={u.fullName || u.username}
-            className="press rounded-full overflow-hidden border border-[var(--border)] shrink-0 grid place-items-center"
-            style={style}>
+    <button onClick={onClick} aria-label={u.fullName || u.username}
+            className={base} style={style}>
       {u.initials}
     </button>
   );
