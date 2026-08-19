@@ -5,82 +5,216 @@ import {
 } from "../data/mock";
 import type { Category, ConnStatus, Connection, NodeKind, Strength, Thought } from "../types";
 import {
-  IconBack, IconCheck, IconClose, IconFilter, IconPen, IconPlus, IconSpark, IconTrash, IconWave,
+  IconCheck, IconClose, IconFilter, IconPen, IconPlus, IconSpark, IconTrash, IconWave,
 } from "../ui/icons";
 import { Button, Card, Chip, Header, Sheet, Tag } from "../ui/primitives";
 import type { ScreenProps } from "./shared";
 
 /* ═══════════════════════════════════════════════════════════════════════
-   MINDMAP — central node → categories → shared trigger / emotion /
-   compulsion nodes. Connections between thoughts are hypotheses the user
-   accepts or rejects. The map only surfaces patterns; it never concludes.
+   MINDMAP — a network of thoughts and the shared threads (trigger,
+   emotion, compulsion) that connect them. No central hub; the shape
+   emerges from what the user has actually captured. Filters let the
+   user narrow to a category or hide a class of thread.
    ═══════════════════════════════════════════════════════════════════════ */
 
-const ring = (i: number, n: number, cx: number, cy: number, r: number, squash = .82) => {
-  const a = -Math.PI / 2 + i * 2 * Math.PI / Math.max(n, 1);
-  return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) * squash };
-};
 const KIND_HUE: Record<NodeKind, number | null> = { compulsion: null, trigger: 205, emotion: 25 };
 const kindColor = (kind: NodeKind): string =>
   kind === "compulsion" ? "var(--accent)" : `hsl(${KIND_HUE[kind]} 55% 58%)`;
+const kindLabel = { trigger: "Triggers", emotion: "Emotions", compulsion: "Compulsions" } as const;
 
-interface GraphNode {
-  key: string; label: string; onClick: () => void;
-  badge?: string | number; color?: string; size?: number; fs?: number; dashed?: boolean;
+/* ── force-directed layout ─────────────────────────────────────────────
+   A small physics loop: repulsion between every pair of nodes, springs
+   on edges, a gentle pull toward the centre. Deterministic seeds so the
+   same graph always settles into the same shape. */
+function runForceLayout(
+  nodes: { id: string; size: number }[],
+  edges: [string, string][],
+  W: number, H: number,
+): Map<string, { x: number; y: number }> {
+  const pos = new Map<string, { x: number; y: number }>();
+  const vel = new Map<string, { x: number; y: number }>();
+  nodes.forEach((n, i) => {
+    const a = (i * 137.508 * Math.PI) / 180;             // golden-angle spread
+    const r = 40 + i * 3;
+    pos.set(n.id, { x: W / 2 + Math.cos(a) * r * 0.35, y: H / 2 + Math.sin(a) * r * 0.35 });
+    vel.set(n.id, { x: 0, y: 0 });
+  });
+  const K_REP = 2400, K_SPR = 0.045, REST = 66, DAMP = 0.80, CTR = 0.0018;
+  const ITER = 280;
+  for (let it = 0; it < ITER; it++) {
+    const f = new Map<string, { x: number; y: number }>();
+    nodes.forEach(n => f.set(n.id, { x: 0, y: 0 }));
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = pos.get(nodes[i].id)!, b = pos.get(nodes[j].id)!;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d2 = Math.max(dx * dx + dy * dy, 36);
+        const d = Math.sqrt(d2);
+        const mag = K_REP / d2;
+        const fx = (mag * dx) / d, fy = (mag * dy) / d;
+        const fi = f.get(nodes[i].id)!, fj = f.get(nodes[j].id)!;
+        fi.x -= fx; fi.y -= fy; fj.x += fx; fj.y += fy;
+      }
+    }
+    edges.forEach(([a, b]) => {
+      const pa = pos.get(a), pb = pos.get(b);
+      if (!pa || !pb) return;
+      const dx = pb.x - pa.x, dy = pb.y - pa.y;
+      const d = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+      const mag = K_SPR * (d - REST);
+      const fx = (mag * dx) / d, fy = (mag * dy) / d;
+      const fa = f.get(a)!, fb = f.get(b)!;
+      fa.x += fx; fa.y += fy; fb.x -= fx; fb.y -= fy;
+    });
+    nodes.forEach(n => {
+      const p = pos.get(n.id)!, fo = f.get(n.id)!, v = vel.get(n.id)!;
+      fo.x += (W / 2 - p.x) * CTR;
+      fo.y += (H / 2 - p.y) * CTR;
+      v.x = (v.x + fo.x) * DAMP;
+      v.y = (v.y + fo.y) * DAMP;
+      const pad = n.size / 2 + 4;
+      p.x = Math.max(pad, Math.min(W - pad, p.x + v.x));
+      p.y = Math.max(pad, Math.min(H - pad, p.y + v.y));
+    });
+  }
+  return pos;
 }
 
-/* Reusable radial graph: a weighted centre with a ring of nodes.
-   The SVG and the node buttons live in ONE fixed-size box that is centred,
-   so the connecting lines and the bubbles share the same origin and stay
-   aligned regardless of container width. */
-function Graph({ centerLabel, centerSub, onCenter, nodes, hint }: {
-  centerLabel: string; centerSub?: string; onCenter: () => void; nodes: GraphNode[]; hint?: string;
-}) {
-  /* keep the largest node fully inside the box so nothing is clipped */
-  const maxNode = nodes.reduce((m, n) => Math.max(m, n.size || 80), 84);
-  const pad = maxNode / 2 + 8;
-  const W = 320, H = 320;
-  const cx = W / 2, cy = H / 2;
-  const R = Math.min(W, H) / 2 - pad;      // radius that fits the ring
-  const pts = nodes.map((nd, i) => ({ ...nd, ...ring(i, nodes.length, cx, cy, R) }));
+/* ── the network graph ──────────────────────────────────────────────── */
+
+interface NetProps {
+  thoughts: Thought[];
+  connections: Connection[];
+  cats: Category[];
+  kinds: Set<NodeKind>;
+  onOpenThought: (t: Thought) => void;
+  onOpenEntity: (k: NodeKind, id: string) => void;
+}
+
+function NetworkGraph({ thoughts, connections, cats, kinds, onOpenThought, onOpenEntity }: NetProps) {
+  const W = 340, H = 400;
+
+  const { nodes, edges, thoughtById, entityByKey } = useMemo(() => {
+    type Ent = { kind: NodeKind; id: string; label: string; n: number };
+    const nodesRaw: { id: string; size: number }[] = [];
+    const thoughtById = new Map<string, Thought>();
+    const entityByKey = new Map<string, Ent>();
+
+    thoughts.forEach(t => {
+      nodesRaw.push({ id: `t:${t.id}`, size: 60 });
+      thoughtById.set(`t:${t.id}`, t);
+    });
+
+    /* entities that show up in ≥ 2 filtered thoughts — these are the
+       shared threads that make a pattern visible in the first place */
+    (["trigger", "emotion", "compulsion"] as NodeKind[]).forEach(kind => {
+      if (!kinds.has(kind)) return;
+      const dict = NODE_DICT[kind];
+      Object.keys(dict).forEach(id => {
+        const n = thoughts.filter(t => nodeIds(t, kind).includes(id)).length;
+        if (n >= 2) {
+          const key = `${kind}:${id}`;
+          nodesRaw.push({ id: key, size: Math.min(52, 34 + n * 3) });
+          entityByKey.set(key, { kind, id, label: dict[id], n });
+        }
+      });
+    });
+
+    const nodeSet = new Set(nodesRaw.map(n => n.id));
+    const edges: [string, string][] = [];
+    thoughts.forEach(t => {
+      (["trigger", "emotion", "compulsion"] as NodeKind[]).forEach(kind => {
+        if (!kinds.has(kind)) return;
+        nodeIds(t, kind).forEach(id => {
+          const k = `${kind}:${id}`;
+          if (nodeSet.has(k)) edges.push([`t:${t.id}`, k]);
+        });
+      });
+    });
+    connections.filter(c => c.status === "accepted").forEach(c => {
+      const a = `t:${c.a}`, b = `t:${c.b}`;
+      if (nodeSet.has(a) && nodeSet.has(b)) edges.push([a, b]);
+    });
+
+    return { nodes: nodesRaw, edges, thoughtById, entityByKey };
+  }, [thoughts, connections, kinds]);
+
+  const positions = useMemo(() => runForceLayout(nodes, edges, W, H), [nodes, edges]);
+
+  const entityEdges = edges.filter(([a, b]) => !(a.startsWith("t:") && b.startsWith("t:")));
+  const thoughtEdges = edges.filter(([a, b]) => a.startsWith("t:") && b.startsWith("t:"));
+
   return (
     <div className="relative w-full h-full grid place-items-center anim-in">
       <div className="relative shrink-0" style={{ width: W, height: H }}>
         <svg width={W} height={H} className="absolute inset-0 overflow-visible">
-          {pts.map(p => (
-            <line key={p.key} x1={cx} y1={cy} x2={p.x} y2={p.y}
-                  stroke="var(--border)" strokeWidth="1.4" strokeDasharray={p.dashed ? "2 5" : "0"} />
-          ))}
-          <circle cx={cx} cy={cy} r="54" fill="var(--soft)" opacity=".55" />
+          {entityEdges.map(([a, b], i) => {
+            const pa = positions.get(a)!, pb = positions.get(b)!;
+            return <line key={"e" + i} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
+                         stroke="var(--border)" strokeWidth={1} strokeDasharray="3 4" opacity={0.85} />;
+          })}
+          {thoughtEdges.map(([a, b], i) => {
+            const pa = positions.get(a)!, pb = positions.get(b)!;
+            return <line key={"t" + i} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
+                         stroke="var(--accent)" strokeWidth={1.6} opacity={0.55} />;
+          })}
         </svg>
-        <button onClick={onCenter}
-          className="press absolute rounded-full grid place-items-center text-center z-10"
-          style={{ left: cx - 50, top: cy - 50, width: 100, height: 100,
-                   background: "var(--accent)", color: "var(--on-accent)",
-                   boxShadow: "0 14px 34px -12px var(--accent)" }}>
-          <div>
-            <div className="wordmark text-[12px] leading-none">{centerLabel}</div>
-            {centerSub && <div className="eyebrow text-[8px] opacity-80 mt-1.5">{centerSub}</div>}
-          </div>
-        </button>
-        {pts.map(p => {
-          const s = p.size || 80;
+
+        {nodes.map(n => {
+          const p = positions.get(n.id)!;
+          const t = thoughtById.get(n.id);
+          if (t) {
+            const cat = catOf(t.cats[0], cats);
+            const s = n.size;
+            const preview = t.thought.length > 32 ? t.thought.slice(0, 30).trim() + "…" : t.thought;
+            return (
+              <button key={n.id} onClick={() => onOpenThought(t)}
+                className="press absolute rounded-full grid place-items-center text-center border-2 p-1.5 anim-up"
+                style={{ left: p.x - s / 2, top: p.y - s / 2, width: s, height: s,
+                         background: "var(--surface)", borderColor: `hsl(${cat.hue} 55% 55%)`,
+                         boxShadow: "var(--shadow)" }}>
+                <span className="leading-tight text-[8.5px] text-[var(--text)] line-clamp-3">{preview}</span>
+              </button>
+            );
+          }
+          const e = entityByKey.get(n.id)!;
+          const s = n.size;
           return (
-            <button key={p.key} onClick={p.onClick}
-              className="press absolute rounded-full grid place-items-center text-center p-2 border anim-up"
+            <button key={n.id} onClick={() => onOpenEntity(e.kind, e.id)}
+              className="press absolute rounded-full grid place-items-center text-center border p-1 anim-up"
               style={{ left: p.x - s / 2, top: p.y - s / 2, width: s, height: s,
-                       background: "var(--surface)", borderColor: p.color || "var(--border)",
+                       background: "var(--surface-2)", borderColor: kindColor(e.kind),
                        boxShadow: "var(--shadow)" }}>
-              <span className="leading-tight text-[var(--text)] line-clamp-3" style={{ fontSize: p.fs || 11 }}>{p.label}</span>
-              {p.badge != null && <span className="mono text-[8.5px] text-[var(--muted)] mt-0.5">{p.badge}</span>}
+              <span className="leading-tight text-[8.5px] text-[var(--muted)] line-clamp-2">{e.label}</span>
+              <span className="mono text-[8px] text-[var(--muted)] mt-0.5">×{e.n}</span>
             </button>
           );
         })}
       </div>
-      {hint && <div className="absolute bottom-2 inset-x-0 text-center eyebrow text-[9px] text-[var(--muted)] pointer-events-none">{hint}</div>}
+      <div className="absolute bottom-2 inset-x-0 text-center eyebrow text-[9px] text-[var(--muted)] pointer-events-none">
+        Category ring · dashed = shared thread · accent = connected thoughts
+      </div>
     </div>
   );
 }
+
+/* ── empty state ────────────────────────────────────────────────────── */
+
+function EmptyState({ message, onPrimary, primary }: {
+  message: string; onPrimary: () => void; primary: string;
+}) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center px-6 text-center">
+      <div className="w-14 h-14 rounded-full bg-[var(--surface-2)] grid place-items-center text-[var(--muted)] mb-4">
+        <IconSpark size={22} />
+      </div>
+      <p className="text-[14px] text-[var(--muted)] leading-relaxed max-w-[260px]">{message}</p>
+      <Button className="mt-5" onClick={onPrimary}>{primary}</Button>
+    </div>
+  );
+}
+
+/* ── screen ─────────────────────────────────────────────────────────── */
 
 interface MapProps extends ScreenProps {
   onUpdate: (t: Thought) => void;
@@ -91,54 +225,87 @@ interface MapProps extends ScreenProps {
 }
 
 export function MapScreen({ go, openMenu, thoughts, onUpdate, toast, cats, setCats, connections, setConnections }: MapProps) {
-  const [mode, setMode] = useState<"overview" | "category">("overview");
-  const [lens, setLens] = useState<"categories" | "patterns" | "list">("categories");
-  const [selCat, setSelCat] = useState<string | null>(null);
+  const [lens, setLens] = useState<"network" | "list">("network");
+  const [activeCats, setActiveCats] = useState<Set<string>>(new Set());
+  const [kinds, setKinds] = useState<Set<NodeKind>>(new Set(["trigger", "emotion", "compulsion"]));
   const [detail, setDetail] = useState<Thought | null>(null);
   const [entity, setEntity] = useState<{ kind: NodeKind; id: string } | null>(null);
   const [wizard, setWizard] = useState<Partial<Thought> | null>(null);
   const [manage, setManage] = useState(false);
-  const [opens, setOpens] = useState(0);             // rumination counter
+  const [opens, setOpens] = useState(0);
   const [muted, setMuted] = useState(false);
 
-  const countCat = (id: string) => thoughts.filter(t => t.cats.includes(id)).length;
+  const toggleCat = (id: string) => setActiveCats(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+  });
+  const toggleKind = (k: NodeKind) => setKinds(prev => {
+    const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n;
+  });
+
+  const filtered = useMemo(() =>
+    activeCats.size === 0 ? thoughts : thoughts.filter(t => t.cats.some(c => activeCats.has(c))),
+    [thoughts, activeCats]);
+
   const openDetail = (t: Thought) => { setDetail(t); setOpens(o => o + 1); };
   const openEntity = (kind: NodeKind, id: string) => { setEntity({ kind, id }); setOpens(o => o + 1); };
   const ruminating = opens >= 7 && !muted;
 
-  /* shared nodes appearing in ≥2 thoughts — the visible patterns */
-  const patternNodes = useMemo(() => {
-    const out: { kind: NodeKind; id: string; label: string; n: number }[] = [];
-    (["compulsion", "trigger", "emotion"] as NodeKind[]).forEach(kind => {
-      const dict = NODE_DICT[kind];
-      Object.keys(dict).forEach(id => {
-        const n = thoughts.filter(t => nodeIds(t, kind).includes(id)).length;
-        if (n >= 2) out.push({ kind, id, label: dict[id], n });
-      });
-    });
-    return out.sort((a, b) => b.n - a.n).slice(0, 7);
-  }, [thoughts]);
-
   return (
     <>
-      <Header title="MindMap" subtitle={`${thoughts.length} thoughts · ${cats.length} categories`}
+      <Header title="MindMap"
+              subtitle={`${filtered.length}${activeCats.size ? ` of ${thoughts.length}` : ""} thoughts · ${cats.length} categories`}
               onMenu={openMenu} onAvatar={() => go("profile")} />
 
-      {/* lens switch */}
-      <div className="shrink-0 px-5 pb-3 flex items-center gap-2">
+      {/* lens switch + manage */}
+      <div className="shrink-0 px-5 pb-2 flex items-center gap-2">
         <div className="flex p-1 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] flex-1">
-          {([["categories", "Categories"], ["patterns", "Patterns"], ["list", "List"]] as const).map(([id, l]) => (
-            <button key={id} onClick={() => { setLens(id); setMode("overview"); }}
+          {([["network", "Network"], ["list", "List"]] as const).map(([id, l]) => (
+            <button key={id} onClick={() => setLens(id)}
               className={`press flex-1 py-2 rounded-xl text-[13px]
-                ${lens === id && mode === "overview" ? "bg-[var(--surface)] text-[var(--text)]" : "text-[var(--muted)]"}`}
-              style={lens === id && mode === "overview" ? { boxShadow: "var(--shadow)" } : {}}>{l}</button>
+                ${lens === id ? "bg-[var(--surface)] text-[var(--text)]" : "text-[var(--muted)]"}`}
+              style={lens === id ? { boxShadow: "var(--shadow)" } : {}}>{l}</button>
           ))}
         </div>
         <button onClick={() => setManage(true)}
-          className="press w-10 h-10 rounded-xl grid place-items-center bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted)]">
+          className="press w-10 h-10 rounded-xl grid place-items-center bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted)]"
+          aria-label="Manage categories">
           <IconFilter size={18} />
         </button>
       </div>
+
+      {/* category filter */}
+      {cats.length > 0 && (
+        <div className="shrink-0 px-5 pb-1.5">
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="eyebrow text-[9.5px] text-[var(--muted)] mr-1">Categories</span>
+            {cats.map(c => (
+              <Chip key={c.id} active={activeCats.has(c.id)} onClick={() => toggleCat(c.id)}>
+                <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ background: `hsl(${c.hue} 55% 55%)` }} />
+                {c.label}
+              </Chip>
+            ))}
+            {activeCats.size > 0 && (
+              <button onClick={() => setActiveCats(new Set())}
+                className="press text-[12px] text-[var(--muted)] px-2">Clear</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* thread-kind filter (only relevant in the network view) */}
+      {lens === "network" && (
+        <div className="shrink-0 px-5 pb-3">
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="eyebrow text-[9.5px] text-[var(--muted)] mr-1">Threads</span>
+            {(["trigger", "emotion", "compulsion"] as NodeKind[]).map(k => (
+              <Chip key={k} active={kinds.has(k)} onClick={() => toggleKind(k)}>
+                <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ background: kindColor(k) }} />
+                {kindLabel[k]}
+              </Chip>
+            ))}
+          </div>
+        </div>
+      )}
 
       {ruminating && (
         <div className="shrink-0 mx-5 mb-2 p-3.5 rounded-2xl bg-[var(--soft)] border border-[var(--border)] anim-up">
@@ -153,47 +320,33 @@ export function MapScreen({ go, openMenu, thoughts, onUpdate, toast, cats, setCa
         </div>
       )}
 
-      {/* body — the graph area reserves space top and bottom so nothing
-          overlaps the info bar above it or the add button below it */}
-      {mode === "overview" && lens === "categories" && (
+      {/* body */}
+      {lens === "network" && (
         <div className="flex-1 relative overflow-hidden etch pb-16">
-          <Graph centerLabel="MindMap" centerSub="your patterns"
-            onCenter={() => setManage(true)}
-            hint="Tap a category to open it"
-            nodes={cats.map(c => ({
-              key: c.id, label: c.label, badge: countCat(c.id),
-              color: `hsl(${c.hue} 50% 60% / .6)`,
-              size: 64 + Math.min(countCat(c.id), 4) * 7, fs: 10.5,
-              onClick: () => { setSelCat(c.id); setMode("category"); },
-            }))} />
+          {thoughts.length === 0 ? (
+            <EmptyState message="Your map is empty. Capture a thought and it will appear here — the network grows from what you actually write."
+              onPrimary={() => setWizard({ thought: "", cats: [], trig: [], emo: [], comp: [] })}
+              primary="Add your first thought" />
+          ) : filtered.length === 0 ? (
+            <EmptyState message="No thoughts match these filters."
+              onPrimary={() => setActiveCats(new Set())}
+              primary="Clear category filter" />
+          ) : (
+            <NetworkGraph thoughts={filtered} connections={connections} cats={cats}
+              kinds={kinds} onOpenThought={openDetail} onOpenEntity={openEntity} />
+          )}
         </div>
       )}
 
-      {mode === "overview" && lens === "patterns" && (
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="shrink-0 px-5 pb-1">
-            <Card className="p-3">
-              <p className="text-[12.5px] text-[var(--muted)] leading-snug">
-                These threads recur across several thoughts. A shared thread is a pattern to notice — not a conclusion about you.
-              </p>
-            </Card>
-          </div>
-          <div className="flex-1 relative overflow-hidden etch pb-16">
-            <Graph centerLabel="MindMap" centerSub="shared threads"
-              onCenter={() => {}}
-              hint="Blue trigger · orange emotion · accent compulsion"
-              nodes={patternNodes.map(p => ({
-                key: p.kind + p.id, label: p.label, badge: `×${p.n}`,
-                color: kindColor(p.kind), size: 60 + p.n * 7, fs: 10,
-                onClick: () => openEntity(p.kind, p.id),
-              }))} />
-          </div>
-        </div>
-      )}
-
-      {mode === "overview" && lens === "list" && (
+      {lens === "list" && (
         <div className="scroll flex-1 px-5 pb-24 space-y-3 stagger">
-          {thoughts.map(t => (
+          {filtered.length === 0 ? (
+            <p className="text-center text-[13.5px] text-[var(--muted)] mt-10 max-w-[260px] mx-auto leading-relaxed">
+              {thoughts.length === 0
+                ? "Your list is empty. Capture a thought to start it."
+                : "No thoughts match these filters."}
+            </p>
+          ) : filtered.map(t => (
             <Card key={t.id} className="p-4 press cursor-pointer" onClick={() => openDetail(t)}>
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 {t.cats.map(cid => (
@@ -213,31 +366,11 @@ export function MapScreen({ go, openMenu, thoughts, onUpdate, toast, cats, setCa
         </div>
       )}
 
-      {mode === "category" && selCat && (
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="shrink-0 px-5 pb-1">
-            <button onClick={() => setMode("overview")}
-              className="press inline-flex items-center gap-1.5 text-[13px] text-[var(--muted)] px-3 py-1.5 rounded-full bg-[var(--surface)] border border-[var(--border)]">
-              <IconBack size={15} />All categories
-            </button>
-          </div>
-          <div className="flex-1 relative overflow-hidden etch pb-16">
-            <Graph centerLabel={catOf(selCat, cats).label.split(" ")[0]}
-              centerSub={`${countCat(selCat)} thoughts`} onCenter={() => {}}
-              hint="Tap a thought to open it"
-              nodes={thoughts.filter(t => t.cats.includes(selCat)).map(t => ({
-                key: t.id, label: `“${t.thought}”`, size: 86, fs: 9.5,
-                color: `hsl(${hueOf(selCat, cats)} 50% 60% / .6)`,
-                onClick: () => openDetail(t),
-              }))} />
-          </div>
-        </div>
-      )}
-
-      {/* add thought — sits in the bottom-right corner, clear of the ring */}
+      {/* add thought — sits in the bottom-right corner, clear of the graph */}
       <button onClick={() => setWizard({ thought: "", cats: [], trig: [], emo: [], comp: [] })}
         className="press absolute right-4 bottom-[84px] z-30 rounded-full grid place-items-center bg-[var(--accent)] text-[var(--on-accent)]"
-        style={{ width: 52, height: 52, boxShadow: "0 12px 28px -10px var(--accent)" }}>
+        style={{ width: 52, height: 52, boxShadow: "0 12px 28px -10px var(--accent)" }}
+        aria-label="Add a thought">
         <IconPlus size={24} />
       </button>
 
@@ -494,7 +627,7 @@ function CategoryManager({ open, onClose, cats, setCats, thoughts, onUpdate, toa
   };
   const add = () => {
     const id = "cat_" + Date.now();
-    setCats(prev => [...prev, { id, label: "New category", hue: 250, ai: false }]);
+    setCats(prev => [...prev, { id, label: "New category", hue: (prev.length * 53 + 195) % 360, ai: false }]);
   };
 
   return (
